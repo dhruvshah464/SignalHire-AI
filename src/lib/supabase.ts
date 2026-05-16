@@ -22,6 +22,13 @@ export type Outreach = {
     linkedin_dm: string;
     linkedin_connection_request?: string;
     follow_ups: string[];
+    email_variants?: {
+      id: string;
+      subject: string;
+      body: string;
+      sent_count: number;
+      reply_count: number;
+    }[];
   };
   status: 'draft' | 'sent' | 'replied' | 'closed';
   next_follow_up_at?: string | null;

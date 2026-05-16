@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CheckCircle2, ChevronRight, Briefcase, FileText, Sparkles, Loader2, ArrowLeft, Upload, X, Trophy, ThumbsDown, Lightbulb, Target, Pencil, Save, Mail } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertCircle, CheckCircle2, ChevronRight, Briefcase, FileText, Sparkles, Loader2, ArrowLeft, Upload, X, Trophy, ThumbsDown, Lightbulb, Target, Pencil, Save, Mail, Search, ExternalLink } from 'lucide-react';
+
+import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { generateOutreach, parseResume, extractJobFromText } from '@/lib/gemini';
@@ -36,7 +38,73 @@ export default function NewOutreach() {
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchTab, setSearchTab] = useState<'search' | 'url'>('search');
   const navigate = useNavigate();
+  const location = useLocation();
+  const editOutreachId = location.state?.editOutreachId;
+
+  React.useEffect(() => {
+    async function loadDraft() {
+      if (!editOutreachId) return;
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('outreaches')
+          .select('*')
+          .eq('id', editOutreachId)
+          .single();
+          
+        if (error) {
+          // Check local storage for demo
+          const localString = localStorage.getItem('demo_outreaches');
+          if (localString) {
+            const localOutreaches = JSON.parse(localString);
+            const found = localOutreaches.find((o: any) => o.id === editOutreachId);
+            if (found) {
+              populateFromDraft(found);
+            }
+          }
+        } else if (data) {
+          populateFromDraft(data);
+        }
+      } catch (err) {
+        console.error('Error loading draft', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    function populateFromDraft(draft: any) {
+      if (draft.job_data) {
+        setJobUrl(draft.job_url || '');
+        setJobData(draft.job_data);
+      }
+      if (draft.resume_data) {
+        setResumeData(draft.resume_data);
+        if (draft.resume_data.original_text) {
+          setResumeText(draft.resume_data.original_text);
+        }
+      }
+      if (draft.outreach_result) {
+        setOutreachResult(draft.outreach_result);
+      }
+      if (draft.messages) {
+        setEditableMessages(draft.messages);
+      }
+      // Jump to step 3 since we have everything theoretically, 
+      // but if we only have job data we jump to step 2.
+      if (draft.messages) {
+        setStep(3);
+      } else if (draft.resume_data) {
+        setStep(2);
+      }
+    }
+
+    loadDraft();
+  }, [editOutreachId]);
 
   const handleNextStep = () => {
     setError(null);
@@ -47,6 +115,46 @@ export default function NewOutreach() {
     setError(null);
     setFieldErrors({});
     setStep(step - 1);
+  };
+
+  const searchJobs = async () => {
+    if (!searchQuery.trim()) {
+      setFieldErrors({ search: "Please enter a job title or keyword" });
+      return;
+    }
+    setIsSearching(true);
+    setError(null);
+    setFieldErrors({});
+    
+    try {
+      const response = await fetch(`/api/search-jobs?query=${encodeURIComponent(searchQuery)}`);
+      if (!response.ok) throw new Error('Search failed');
+      const data = await response.json();
+      setSearchResults(data.data || []);
+      if (!data.data || data.data.length === 0) {
+        toast.info("No jobs found for this query");
+      }
+    } catch (err: any) {
+      console.error("Search error:", err);
+      toast.error("Failed to search jobs. You can still paste a URL manually.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const selectSearchResult = (job: any) => {
+    setJobData({
+      title: job.job_title,
+      company: job.employer_name,
+      description: job.job_description,
+      url: job.job_apply_link,
+      recruiter_name: '',
+      recruiter_url: ''
+    });
+    setJobUrl(job.job_apply_link || '');
+    setSearchResults([]);
+    setSearchQuery('');
+    toast.success('Job details imported from search');
   };
 
   const scrapeJob = async () => {
@@ -77,6 +185,8 @@ export default function NewOutreach() {
           data.title = aiData.title || data.title;
           data.company = aiData.company || data.company;
           data.description = aiData.description || data.description;
+          data.recruiter_name = aiData.recruiter_name || data.recruiter_name;
+          data.recruiter_url = aiData.recruiter_url || data.recruiter_url;
         } catch (aiErr) {
           console.warn('AI job extraction failed, using best-guess scraper results', aiErr);
         }
@@ -84,7 +194,6 @@ export default function NewOutreach() {
 
       setJobData(data);
       toast.success('Job details imported successfully');
-      handleNextStep();
     } catch (err: any) {
       if (err instanceof z.ZodError) {
         const errors: Record<string, string> = {};
@@ -204,39 +313,70 @@ export default function NewOutreach() {
     try {
       const updatedResumeData = {
         ...resumeData,
-        matchScore: outreachResult.matchScore || 85,
-        improvementSuggestions: outreachResult.improvementSuggestions || []
+        matchScore: outreachResult?.matchScore || 85,
+        improvementSuggestions: outreachResult?.improvementSuggestions || []
       };
 
       const payload = {
-        id: Math.random().toString(36).substring(7),
-        user_id: (await supabase.auth.getUser()).data.user?.id || '00000000-0000-0000-0000-000000000000',
-        job_title: jobData.title,
-        job_url: jobData.url,
-        company_name: jobData.company,
-        recruiter_name: jobData.recruiter_name || '',
-        recruiter_email: jobData.recruiter_email || '',
-        recruiter_url: jobData.recruiter_url || '',
+        job_title: jobData?.title || 'Unknown Job',
+        job_url: jobData?.url || '',
+        company_name: jobData?.company || 'Unknown Company',
+        recruiter_name: jobData?.recruiter_name || '',
+        recruiter_email: jobData?.recruiter_email || '',
+        recruiter_url: jobData?.recruiter_url || '',
         job_data: jobData,
         resume_data: updatedResumeData,
         messages: editableMessages,
         status: 'draft' as const,
-        created_at: new Date().toISOString()
+        updated_at: new Date().toISOString()
       };
+      
+      const idToSave = editOutreachId || Math.random().toString(36).substring(7);
 
-      // Save it
-      const { data, error: sbError } = await supabase.from('outreaches').insert([payload]).select();
+      let sbError = null;
+      let finalData = null;
+
+      if (editOutreachId) {
+        const { data, error } = await supabase.from('outreaches').update(payload).eq('id', editOutreachId).select();
+        sbError = error;
+        finalData = data;
+      } else {
+        const fullPayload = {
+          ...payload,
+          id: idToSave,
+          user_id: (await supabase.auth.getUser()).data.user?.id || '00000000-0000-0000-0000-000000000000',
+          created_at: new Date().toISOString()
+        };
+        const { data, error } = await supabase.from('outreaches').insert([fullPayload]).select();
+        sbError = error;
+        finalData = data;
+      }
 
       if (sbError) {
-        console.warn('Supabase insert failed, falling back to local storage:', sbError);
+        console.warn('Supabase save failed, falling back to local storage:', sbError);
         const existingString = localStorage.getItem('demo_outreaches') || '[]';
-        const existing = JSON.parse(existingString);
-        localStorage.setItem('demo_outreaches', JSON.stringify([...existing, payload]));
-        toast.info('Saved to local storage (Demo Mode)');
-        navigate(`/outreach/${payload.id}`);
-      } else if (data && data.length > 0) {
-        toast.success('Campaign saved successfully!');
-        navigate(`/outreach/${data[0].id}`);
+        let existing = JSON.parse(existingString);
+        
+        if (editOutreachId) {
+            const idx = existing.findIndex((o: any) => o.id === editOutreachId);
+            if (idx !== -1) {
+                existing[idx] = { ...existing[idx], ...payload };
+            }
+        } else {
+            existing = [...existing, { 
+              ...payload, 
+              id: idToSave, 
+              user_id: '00000000-0000-0000-0000-000000000000', 
+              created_at: new Date().toISOString() 
+            }];
+        }
+        
+        localStorage.setItem('demo_outreaches', JSON.stringify(existing));
+        toast.info(editOutreachId ? 'Draft updated! (Demo Mode)' : 'Saved to local storage (Demo Mode)');
+        navigate(`/outreach/${idToSave}`);
+      } else if (finalData && finalData.length > 0) {
+        toast.success(editOutreachId ? 'Draft updated successfully!' : 'Campaign saved successfully!');
+        navigate(`/outreach/${finalData[0].id}`);
       } else {
         throw new Error('Failed to save outreach.');
       }
@@ -308,37 +448,172 @@ export default function NewOutreach() {
           {step === 1 && (
             <div className="space-y-6">
               <div className="space-y-2">
-                <h2 className="text-xl font-bold">Paste Job URL</h2>
-                <p className="text-slate-500">Enter the LinkedIn job link, we'll automatically scrape and parse the details.</p>
+                <h2 className="text-xl font-bold">Find Job</h2>
+                <p className="text-slate-500">Search for jobs directly or paste a link from any job board.</p>
               </div>
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <div className="flex-1 space-y-1">
-                    <input 
-                      type="url" 
-                      placeholder="https://www.linkedin.com/jobs/view/..." 
-                      className={cn(
-                        "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium",
-                        fieldErrors.url ? "border-red-300 bg-red-50" : "border-slate-200"
-                      )}
-                      value={jobUrl}
-                      onChange={(e) => setJobUrl(e.target.value)}
-                    />
-                    {fieldErrors.url && <p className="text-red-500 text-xs font-medium italic animate-in fade-in slide-in-from-top-1">{fieldErrors.url}</p>}
+
+              <Tabs value={searchTab} onValueChange={(v) => setSearchTab(v as 'search' | 'url')} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6">
+                  <TabsTrigger value="search"><Search className="w-4 h-4 mr-2" /> Search Jobs</TabsTrigger>
+                  <TabsTrigger value="url"><ExternalLink className="w-4 h-4 mr-2" /> Paste URL</TabsTrigger>
+                </TabsList>
+                <TabsContent value="search" className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="flex-1 space-y-1">
+                      <input 
+                        type="text" 
+                        placeholder="E.g. Frontend Developer at Google..." 
+                        className={cn(
+                          "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium",
+                          fieldErrors.search ? "border-red-300 bg-red-50" : "border-slate-200"
+                        )}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && searchJobs()}
+                      />
+                      {fieldErrors.search && <p className="text-red-500 text-xs font-medium italic">{fieldErrors.search}</p>}
+                    </div>
+                    <Button 
+                      onClick={searchJobs} 
+                      disabled={isSearching}
+                      className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0"
+                    >
+                      {isSearching && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      Search
+                    </Button>
                   </div>
-                  <Button 
-                    onClick={scrapeJob} 
-                    disabled={loading}
-                    className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0"
-                  >
-                    {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Import Job
-                  </Button>
+                  
+                  {searchResults.length > 0 && (
+                    <div className="mt-4 border border-slate-100 rounded-xl max-h-[300px] overflow-y-auto bg-slate-50 divide-y divide-slate-100">
+                      {searchResults.map((result: any) => (
+                        <div key={result.job_id} className="p-4 hover:bg-white transition-colors cursor-pointer group" onClick={() => selectSearchResult(result)}>
+                          <div className="flex justify-between items-start mb-1">
+                            <h4 className="font-bold text-sm text-slate-800 group-hover:text-brand-primary transition-colors">{result.job_title}</h4>
+                            <div className="flex items-center gap-2">
+                              {result.job_publisher && (
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-100 px-2 py-1 rounded">
+                                  {result.job_publisher}
+                                </span>
+                              )}
+                              {result.job_apply_link && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="h-6 px-2 text-[10px] uppercase font-bold hover:bg-slate-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(result.job_apply_link, '_blank');
+                                  }}
+                                >
+                                  Apply Now
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs font-medium text-slate-500">{result.employer_name}</p>
+                          <p className="text-xs text-slate-400 mt-2 line-clamp-2">{result.job_description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="url" className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="flex-1 space-y-1">
+                      <input 
+                        type="url" 
+                        placeholder="https://www.linkedin.com/jobs/view/..." 
+                        className={cn(
+                          "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium",
+                          fieldErrors.url ? "border-red-300 bg-red-50" : "border-slate-200"
+                        )}
+                        value={jobUrl}
+                        onChange={(e) => {
+                          setJobUrl(e.target.value);
+                          if (jobData) setJobData(null);
+                        }}
+                      />
+                      {fieldErrors.url && <p className="text-red-500 text-xs font-medium italic animate-in fade-in slide-in-from-top-1">{fieldErrors.url}</p>}
+                    </div>
+                    <Button 
+                      onClick={scrapeJob} 
+                      disabled={loading}
+                      className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0"
+                    >
+                      {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      {jobData ? "Re-Import Job" : "Import Job"}
+                    </Button>
+                  </div>
+                  {!jobData && (
+                    <div className="pt-4 border-t border-dashed border-slate-200">
+                      <p className="text-xs text-slate-400">Supported: LinkedIn, Glassdoor, Indeed, and most company career pages.</p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              {jobData && (
+                <div className="space-y-4 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-lg">Job Details & Recruiter</h3>
+                    {jobData.url && (
+                      <Button 
+                        size="sm"
+                        variant="outline" 
+                        className="h-8 border-slate-200 text-slate-700 font-bold"
+                        onClick={() => window.open(jobData.url, '_blank')}
+                      >
+                        Apply Now <ExternalLink className="w-3 h-3 ml-2" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Job Title</label>
+                      <input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 font-medium" value={jobData.title || ''} readOnly />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Company</label>
+                      <input className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 font-medium" value={jobData.company || ''} readOnly />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Recruiter Name</label>
+                      <input 
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none" 
+                        placeholder="E.g. Jane Doe (Optional)"
+                        value={jobData.recruiter_name || ''} 
+                        onChange={(e) => setJobData({ ...jobData, recruiter_name: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Recruiter LinkedIn URL</label>
+                      <input 
+                        type="url"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none" 
+                        placeholder="https://linkedin.com/in/... (Optional)"
+                        value={jobData.recruiter_url || ''} 
+                        onChange={(e) => setJobData({ ...jobData, recruiter_url: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <Button onClick={handleNextStep} className="bg-brand-primary hover:bg-brand-primary/90">
+                      Continue to Resume <ChevronRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="pt-4 border-t border-dashed border-slate-200">
-                <p className="text-xs text-slate-400">Supported: LinkedIn, Glassdoor, Indeed, and most company career pages.</p>
-              </div>
+              )}
+
+              {!jobData && (
+                <div className="pt-4 border-t border-dashed border-slate-200">
+                  <p className="text-xs text-slate-400">Supported: LinkedIn, Glassdoor, Indeed, and most company career pages.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -660,19 +935,23 @@ export default function NewOutreach() {
                   </div>
                   <CardContent className="p-0">
                     {editingField?.type === 'linkedin_connection_request' ? (
-                      <div className="p-4 space-y-2">
+                      <div className="p-4 space-y-3">
                         <textarea
-                          className="w-full h-24 p-0 text-sm font-medium focus:outline-none focus:ring-0 resize-none"
-                          value={editableMessages.linkedin_connection_request}
+                          className="w-full h-24 p-3 text-sm font-medium border rounded-lg focus:ring-2 focus:ring-brand-primary/20 outline-none resize-none"
+                          value={editableMessages.linkedin_connection_request || ''}
                           onChange={(e) => updateMessage('linkedin_connection_request', e.target.value)}
                         />
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-between">
                           <span className={cn(
                             "text-[10px] font-bold",
                             (editableMessages.linkedin_connection_request?.length || 0) > 300 ? "text-red-500" : "text-slate-400"
                           )}>
                             {editableMessages.linkedin_connection_request?.length || 0}/300
                           </span>
+                          <Button size="sm" className="bg-brand-primary h-8" onClick={() => setEditingField(null)}>
+                            <Save className="w-3 h-3 mr-1" />
+                            Save
+                          </Button>
                         </div>
                       </div>
                     ) : (

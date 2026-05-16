@@ -11,10 +11,10 @@ const getAI = () => {
 export const extractJobFromText = async (text: string) => {
   const ai = getAI();
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-pro-preview",
     contents: `Extract job details from this text input. 
-    Return ONLY a JSON object with: { "title": string, "company": string, "description": string }.
-    If not found, use logical guesses based on the content.
+    Return ONLY a JSON object with: { "title": string, "company": string, "description": string, "recruiter_name": string, "recruiter_url": string }.
+    If not found, use logical guesses based on the content or leave empty.
     
     INPUT: ${text}`,
     config: {
@@ -24,7 +24,9 @@ export const extractJobFromText = async (text: string) => {
         properties: {
           title: { type: Type.STRING },
           company: { type: Type.STRING },
-          description: { type: Type.STRING }
+          description: { type: Type.STRING },
+          recruiter_name: { type: Type.STRING, description: "Optional name of the recruiter or contact person if mentioned" },
+          recruiter_url: { type: Type.STRING, description: "Optional LinkedIn or social URL of the recruiter if mentioned" }
         }
       }
     }
@@ -139,4 +141,38 @@ export const simulateRecruiterChat = async (history: { role: 'user' | 'model', t
   const lastMessage = history[history.length - 1].text;
   const response = await chat.sendMessage({ message: lastMessage });
   return response.text;
+};
+
+export const evaluateSimulatorResponse = async (history: { role: 'user' | 'model', text: string }[], jobData: any) => {
+  const ai = getAI();
+  const prompt = `
+    Job Data: ${JSON.stringify(jobData)}
+    Conversation History: ${JSON.stringify(history)}
+
+    Task: You are an expert interview coach. Analyze the user's latest response in the context of the conversation and the job description.
+    Provide a score between 0 and 100 for their latest response, along with specific feedback on what they did well and how they can improve.
+    Consider the recruiter's persona (tough but fair technical recruiter) and the job requirements.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          score: { type: Type.NUMBER, description: "A score from 0-100 indicating the quality of the response." },
+          feedback: { type: Type.STRING, description: "Overall feedback on the response." },
+          strengths: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Specific things the user did well." },
+          improvements: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Specific ways the user can improve." }
+        }
+      }
+    }
+  });
+
+  if (!response.text) {
+    throw new Error("Gemini returned an empty response. Please try again.");
+  }
+  return JSON.parse(response.text);
 };

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, ExternalLink, Mail, MessageSquare, Clock, CheckCircle, Copy, Share2, MoreVertical } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Mail, MessageSquare, Clock, CheckCircle, Copy, Share2, MoreVertical, Save, Loader2, Pencil } from 'lucide-react';
 import Simulator from '@/components/outreach/Simulator';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
@@ -21,6 +21,9 @@ export default function OutreachDetail() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [suggestedEmails, setSuggestedEmails] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   useEffect(() => {
     async function fetchOutreach() {
@@ -39,6 +42,9 @@ export default function OutreachDetail() {
             const found = localOutreaches.find((o: any) => o.id === id);
             if (found) {
               setOutreach(found);
+              // Set local mock suggestions
+              const emails = Array.from(new Set(localOutreaches.map((o: any) => o.recruiter_email).filter(Boolean)));
+              setSuggestedEmails(emails as string[]);
               setLoading(false);
               return;
             }
@@ -46,6 +52,17 @@ export default function OutreachDetail() {
           throw error;
         }
         setOutreach(data);
+        
+        // Fetch previous recruiter emails for autocomplete
+        const { data: allOutreaches } = await supabase
+          .from('outreaches')
+          .select('recruiter_email')
+          .not('recruiter_email', 'is', null);
+          
+        if (allOutreaches) {
+          const uniqueEmails = Array.from(new Set(allOutreaches.map(o => o.recruiter_email).filter(Boolean)));
+          setSuggestedEmails(uniqueEmails as string[]);
+        }
       } catch (error) {
         console.error('Error fetching outreach:', error);
       } finally {
@@ -55,6 +72,65 @@ export default function OutreachDetail() {
 
     fetchOutreach();
   }, [id]);
+
+  useEffect(() => {
+    if (outreach) {
+      setNotes(outreach.notes || '');
+    }
+  }, [outreach]);
+
+  const handleSaveNotes = async () => {
+    if (!outreach || !id) return;
+    setIsSavingNotes(true);
+    try {
+      setOutreach(prev => prev ? { ...prev, notes } : null);
+
+      const { error } = await supabase
+        .from('outreaches')
+        .update({ notes })
+        .eq('id', id);
+        
+      if (error) {
+        // Update local storage if it was a demo item
+        const localString = localStorage.getItem('demo_outreaches');
+        if (localString) {
+          const localOutreaches = JSON.parse(localString);
+          const index = localOutreaches.findIndex((o: any) => o.id === id);
+          if (index !== -1) {
+            localOutreaches[index] = { ...localOutreaches[index], notes };
+            localStorage.setItem('demo_outreaches', JSON.stringify(localOutreaches));
+          }
+        }
+      }
+      toast.success('Notes saved successfully');
+    } catch (err) {
+      console.error('Error saving notes:', err);
+      toast.error('Failed to save notes');
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  // A/B Testing State
+  const [activeVariantId, setActiveVariantId] = useState<string>('A');
+  const [isEditingVariant, setIsEditingVariant] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
+
+  const getVariants = () => {
+    if (!outreach) return [];
+    if (outreach.messages.email_variants && outreach.messages.email_variants.length > 0) {
+      return outreach.messages.email_variants;
+    }
+    // Default fallback variant
+    return [{
+      id: 'A',
+      subject: outreach.messages.email_subject || `Application: ${outreach.job_title} at ${outreach.company_name}`,
+      body: outreach.messages.cold_email || '',
+      sent_count: outreach.status === 'sent' || outreach.status === 'replied' || outreach.status === 'closed' ? 1 : 0,
+      reply_count: outreach.status === 'replied' ? 1 : 0
+    }];
+  };
 
   const updateStatus = async (status: string) => {
     try {
@@ -67,9 +143,22 @@ export default function OutreachDetail() {
         updates.next_follow_up_at = nextDate.toISOString();
         updates.last_follow_up_index = -1;
       }
+      
+      let finalMessages = outreach.messages;
+
+      // Update reply metric if replied
+      if (status === 'replied') {
+        const currentVariants = getVariants();
+        const vIndex = currentVariants.findIndex(v => v.id === activeVariantId);
+        if (vIndex !== -1 && currentVariants[vIndex].reply_count === 0) { // Only increment once per reply update
+          currentVariants[vIndex].reply_count += 1;
+          finalMessages = { ...outreach.messages, email_variants: currentVariants };
+          updates.messages = finalMessages as any;
+        }
+      }
 
       // Local update first for immediate response
-      setOutreach(prev => prev ? { ...prev, ...updates } : null);
+      setOutreach(prev => prev ? { ...prev, ...updates, messages: finalMessages } : null);
 
       const { error } = await supabase
         .from('outreaches')
@@ -97,6 +186,62 @@ export default function OutreachDetail() {
 
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [tempEmail, setTempEmail] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // A/B testing variables
+  const variants = getVariants();
+  const activeVariant = variants.find(v => v.id === activeVariantId) || variants[0];
+
+  const handleCreateVariant = async () => {
+    if (!outreach || !id) return;
+    const currentVariants = getVariants();
+    if (currentVariants.length >= 2) return; // Only allow A and B for now
+
+    const newVariant = {
+      id: 'B',
+      subject: currentVariants[0].subject,
+      body: currentVariants[0].body,
+      sent_count: 0,
+      reply_count: 0
+    };
+
+    const newVariants = [...currentVariants, newVariant];
+    const newMessages = { ...outreach.messages, email_variants: newVariants };
+
+    setOutreach({ ...outreach, messages: newMessages });
+    setActiveVariantId('B');
+    setIsEditingVariant(true);
+    setEditSubject(newVariant.subject);
+    setEditBody(newVariant.body);
+
+    await supabase.from('outreaches').update({ messages: newMessages }).eq('id', id);
+  };
+
+  const handleSaveVariant = async () => {
+    if (!outreach || !id || !activeVariant) return;
+    const currentVariants = getVariants();
+    const index = currentVariants.findIndex(v => v.id === activeVariant.id);
+    if (index === -1) return;
+
+    currentVariants[index] = { ...activeVariant, subject: editSubject, body: editBody };
+    const newMessages = { ...outreach.messages, email_variants: currentVariants };
+
+    // Also update root cold_email if we are saving variant A so it doesn't break other things
+    if (activeVariant.id === 'A') {
+      newMessages.email_subject = editSubject;
+      newMessages.cold_email = editBody;
+    }
+
+    setOutreach({ ...outreach, messages: newMessages });
+    setIsEditingVariant(false);
+
+    await supabase.from('outreaches').update({ messages: newMessages }).eq('id', id);
+    toast.success('Variant saved');
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingVariant(false);
+  };
 
   const handleSendEmail = async () => {
     if (!outreach) return;
@@ -124,14 +269,24 @@ export default function OutreachDetail() {
       return;
     }
 
-    const subject = outreach.messages.email_subject || `Application: ${outreach.job_title} at ${outreach.company_name}`;
-    const body = outreach.messages.cold_email;
+    const subject = activeVariant.subject;
+    const body = activeVariant.body;
     const to = tempEmail || outreach.recruiter_email || '';
     
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     
     window.open(gmailUrl, '_blank');
     
+    // Update metric
+    const currentVariants = getVariants();
+    const vIndex = currentVariants.findIndex(v => v.id === activeVariant.id);
+    if (vIndex !== -1) {
+      currentVariants[vIndex].sent_count += 1;
+      const newMessages = { ...outreach.messages, email_variants: currentVariants };
+      setOutreach({ ...outreach, messages: newMessages });
+      await supabase.from('outreaches').update({ messages: newMessages }).eq('id', id!);
+    }
+
     // Update status to sent tracking
     setSending(true);
     await new Promise(resolve => setTimeout(resolve, 800));
@@ -209,12 +364,32 @@ export default function OutreachDetail() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {outreach.job_url && (
+            <Button 
+              size="sm"
+              variant="outline" 
+              className="h-8 border-slate-200 text-slate-700 font-bold"
+              onClick={() => window.open(outreach.job_url, '_blank')}
+            >
+              Apply Now <ExternalLink className="w-3 h-3 ml-2" />
+            </Button>
+          )}
           <Badge className={cn(
             "border-none text-[10px] font-bold uppercase tracking-wider px-2 py-1",
             outreach.status === 'replied' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
           )}>
             Status: {outreach.status}
           </Badge>
+          {outreach.status === 'draft' && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="border-brand-border h-9"
+              onClick={() => navigate('/new', { state: { editOutreachId: outreach.id } })}
+            >
+              <Pencil className="w-4 h-4 mr-2" /> Edit Draft
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="border-brand-border h-9">
             <Share2 className="w-4 h-4 mr-2" /> Share
           </Button>
@@ -281,13 +456,39 @@ export default function OutreachDetail() {
                         <Button variant="ghost" size="sm" className="h-4 p-0 text-[10px] text-slate-400" onClick={() => setShowEmailInput(false)}>Cancel</Button>
                       </div>
                       <div className="flex gap-2">
-                        <input 
-                          type="email" 
-                          placeholder="recruiter@company.com" 
-                          className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
-                          value={tempEmail}
-                          onChange={(e) => setTempEmail(e.target.value)}
-                        />
+                        <div className="flex-1 relative">
+                          <input 
+                            type="email" 
+                            placeholder="recruiter@company.com" 
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                            value={tempEmail}
+                            onChange={(e) => {
+                              setTempEmail(e.target.value);
+                              setShowSuggestions(true);
+                            }}
+                            onFocus={() => setShowSuggestions(true)}
+                            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                          />
+                          {showSuggestions && suggestedEmails.filter(email => String(email).toLowerCase().includes(tempEmail.toLowerCase())).length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+                              {suggestedEmails
+                                .filter(email => String(email).toLowerCase().includes(tempEmail.toLowerCase()))
+                                .map(email => (
+                                  <div 
+                                    key={email} 
+                                    className="px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                    onClick={() => {
+                                      setTempEmail(email);
+                                      setShowSuggestions(false);
+                                    }}
+                                  >
+                                    {email}
+                                  </div>
+                                ))
+                              }
+                            </div>
+                          )}
+                        </div>
                         <Button size="sm" onClick={saveRecruiterEmail} className="bg-brand-primary">Save & Close</Button>
                       </div>
                       {validationError && (
@@ -305,15 +506,77 @@ export default function OutreachDetail() {
                         {outreach.recruiter_email && <span className="text-slate-400 font-normal ml-2">({outreach.recruiter_email})</span>}
                       </p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Subject</p>
-                      <p className="text-sm font-bold text-slate-800">{outreach.messages.email_subject || `Application: ${outreach.job_title}`}</p>
-                    </div>
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-lg text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap border border-slate-100">
-                    {outreach.messages.cold_email}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-2">
+                       {variants.map(v => (
+                         <Button
+                           key={v.id}
+                           variant={activeVariantId === v.id ? "default" : "outline"}
+                           size="sm"
+                           onClick={() => {
+                             setActiveVariantId(v.id);
+                             setIsEditingVariant(false);
+                           }}
+                           className={cn("h-8 px-4", activeVariantId === v.id ? "bg-brand-primary" : "border-slate-200 text-slate-600")}
+                         >
+                           Variant {v.id}
+                           {v.sent_count > 0 && <span className="ml-2 text-[10px] bg-white/20 px-1.5 py-0.5 rounded">{v.sent_count} sent</span>}
+                         </Button>
+                       ))}
+                       {variants.length < 2 && (
+                         <Button variant="outline" size="sm" onClick={handleCreateVariant} className="h-8 border-dashed border-slate-300 text-slate-500">
+                           + Add Variation
+                         </Button>
+                       )}
+                    </div>
+                    {!isEditingVariant && (
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        setEditSubject(activeVariant.subject);
+                        setEditBody(activeVariant.body);
+                        setIsEditingVariant(true);
+                      }} className="h-8 text-slate-500">
+                        <Pencil className="w-4 h-4 mr-2" /> Edit Variant
+                      </Button>
+                    )}
                   </div>
+
+                  {isEditingVariant ? (
+                    <div className="space-y-4 pt-2">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Subject</p>
+                        <input 
+                          type="text" 
+                          value={editSubject}
+                          onChange={e => setEditSubject(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Body</p>
+                        <textarea 
+                          value={editBody}
+                          onChange={e => setEditBody(e.target.value)}
+                          className="w-full h-64 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-primary/20 outline-none resize-none"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={handleCancelEdit}>Cancel</Button>
+                        <Button size="sm" onClick={handleSaveVariant} className="bg-brand-primary">Save Changes</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Subject</p>
+                        <p className="text-sm font-bold text-slate-800">{activeVariant.subject}</p>
+                      </div>
+                      <div className="bg-slate-50 p-6 rounded-lg text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap border border-slate-100">
+                        {activeVariant.body}
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -384,6 +647,31 @@ export default function OutreachDetail() {
                     </CardContent>
                   </Card>
                 )}
+
+                <Card className="glass-card shadow-sm mt-8 border-t-4 border-t-slate-200">
+                  <CardHeader className="pb-4 border-b border-slate-50">
+                    <CardTitle className="text-sm font-bold text-slate-700">Reference: Cold Email Draft</CardTitle>
+                    <CardDescription className="text-xs">Preview of your generated cold email, for quick reference while sending LinkedIn messages.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="flex flex-wrap gap-x-8 gap-y-4 pb-4 border-b border-slate-100">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recipient</p>
+                        <p className="text-sm font-bold text-slate-800">
+                          {outreach.recruiter_name || 'HR/Hiring Team'} 
+                          {outreach.recruiter_email && <span className="text-slate-400 font-normal ml-2">({outreach.recruiter_email})</span>}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Subject</p>
+                        <p className="text-sm font-bold text-slate-800">{outreach.messages.email_subject || `Application: ${outreach.job_title}`}</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 mt-4 p-6 rounded-lg text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap border border-slate-100">
+                      {outreach.messages.cold_email}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 
@@ -462,12 +750,20 @@ export default function OutreachDetail() {
               </div>
 
               <div className="pt-4 border-t space-y-3">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Job Links</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Job Links & Overview</p>
                 <div className="space-y-2">
                   <a href={outreach.job_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all text-sm font-medium group">
                     View on LinkedIn
                     <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-brand-primary" />
                   </a>
+                  {outreach.job_data?.description && (
+                    <div className="mt-3 p-3 bg-slate-50 border border-slate-100 rounded-lg">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Job Description Summary</p>
+                      <p className="text-xs text-slate-600 font-medium whitespace-pre-wrap line-clamp-6">
+                        {outreach.job_data.description}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -483,6 +779,30 @@ export default function OutreachDetail() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="pt-4 border-t space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Internal Notes</p>
+                  {notes !== (outreach.notes || '') && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-[10px] text-slate-500 hover:text-brand-primary"
+                      onClick={handleSaveNotes}
+                      disabled={isSavingNotes}
+                    >
+                      {isSavingNotes ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+                      Save
+                    </Button>
+                  )}
+                </div>
+                <textarea
+                  className="w-full h-32 p-3 text-sm bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-brand-primary/20 focus:bg-white outline-none resize-none transition-all"
+                  placeholder="Add details about this campaign, reminders, or insights..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </div>
             </CardContent>
           </Card>

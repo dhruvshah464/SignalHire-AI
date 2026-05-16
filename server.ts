@@ -140,6 +140,83 @@ async function startServer() {
     }
   }, 30000); // Check every 30 seconds for the demo
 
+  // API Route: Search Jobs (RapidAPI JSearch / Remotive fallback / mock fallback)
+  app.get("/api/search-jobs", async (req, res) => {
+    const { query } = req.query;
+    if (!query) return res.status(400).json({ error: "Query is required" });
+
+    const key = process.env.RAPIDAPI_KEY;
+    
+    if (key) {
+      try {
+        const options = {
+          method: 'GET',
+          url: 'https://jsearch.p.rapidapi.com/search',
+          params: {
+            query: query as string,
+            page: '1',
+            num_pages: '1'
+          },
+          headers: {
+            'X-RapidAPI-Key': key,
+            'X-RapidAPI-Host': 'jsearch.p.rapidapi.com'
+          }
+        };
+
+        const response = await axios.request(options);
+        return res.json(response.data);
+      } catch (error: any) {
+        // Suppress expected subscription errors to keep logs clean
+        if (error?.response?.status !== 403 && error?.response?.status !== 401) {
+          console.error("[Job Search API Error]", error?.response?.data || error.message);
+        }
+        console.log("Using Remotive API as fallback...");
+      }
+    } else {
+        console.log("No valid RAPIDAPI_KEY provided. Using Remotive API instead.");
+    }
+
+    try {
+        // Fallback to free Remotive API
+        const response = await axios.get(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query as string)}`);
+        const jobs = response.data.jobs || [];
+        
+        // Map Remotive jobs to JSearch expected format
+        const mappedJobs = jobs.slice(0, 15).map((job: any) => ({
+            job_id: job.id.toString(),
+            job_title: job.title,
+            employer_name: job.company_name,
+            job_description: (job.description || '').replace(/<[^>]+>/g, '').substring(0, 500) + '...', // Strip HTML tags
+            job_apply_link: job.url,
+            job_publisher: 'Remotive'
+        }));
+        
+        return res.json({ data: mappedJobs });
+    } catch (fallbackError: any) {
+      console.error("[Remotive Fallback Error]", fallbackError.message);
+      
+      // Final fallback to mock data
+      return res.json({
+        data: [
+          {
+            job_id: "mock-1",
+            job_title: `Mock: ${query} Developer`,
+            employer_name: "Mock Inc.",
+            job_description: "Both primary and fallback APIs failed. This is a mock job description. We are looking for an experienced developer...",
+            job_apply_link: "https://example.com/job/1"
+          },
+          {
+            job_id: "mock-2",
+            job_title: `Mock Senior ${query}`,
+            employer_name: "Tech Corp",
+            job_description: "Another mock job description. Join our fast-paced team to build awesome mock products.",
+            job_apply_link: "https://example.com/job/2"
+          }
+        ]
+      });
+    }
+  });
+
   // API Route: Scrape Job URL
   app.post("/api/scrape-job", async (req, res) => {
     console.log("POST /api/scrape-job called", req.body);

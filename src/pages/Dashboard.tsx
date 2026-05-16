@@ -3,8 +3,8 @@ import { supabase, Outreach } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, ExternalLink, Mail, MessageSquare, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Search, ExternalLink, Mail, MessageSquare, Sparkles, Pencil } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { OnboardingModal } from '@/components/OnboardingModal';
 import { AnimatePresence } from 'motion/react';
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [outreaches, setOutreaches] = useState<Outreach[]>([]);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Check onboarding status
@@ -87,12 +88,20 @@ export default function Dashboard() {
             Manage and track your personalized campaigns.
           </p>
         </div>
-        <Link to="/new">
-          <Button className="bg-brand-primary hover:bg-brand-primary/90 gap-2 rounded-lg font-semibold px-4">
-            <Plus className="w-4 h-4" />
-            New Outreach
-          </Button>
-        </Link>
+        <div className="relative">
+          <Link to="/new">
+            <Button className="bg-brand-primary hover:bg-brand-primary/90 gap-2 rounded-lg font-semibold px-4">
+              <Plus className="w-4 h-4" />
+              New Outreach
+            </Button>
+          </Link>
+          {!showOnboarding && !loading && outreaches.length === 0 && (
+            <div className="absolute -bottom-12 right-0 md:left-1/2 md:-translate-x-1/2 w-max animate-bounce bg-slate-800 text-white text-[11px] font-bold py-2 px-3 rounded-lg shadow-lg pointer-events-none z-20">
+              <div className="absolute -top-1 right-6 md:right-auto md:left-1/2 md:-translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45" />
+              Click here to start! ✨
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-6">
@@ -116,22 +125,37 @@ export default function Dashboard() {
                 No active campaigns.
               </div>
             ) : outreaches.map((outreach) => (
-              <Link 
+              <div 
                 key={outreach.id} 
-                to={`/outreach/${outreach.id}`}
+                onClick={() => navigate(`/outreach/${outreach.id}`)}
                 className={cn(
-                  "block p-4 hover:bg-blue-50 transition-colors border-l-4",
+                  "block p-4 hover:bg-blue-50 transition-colors border-l-4 cursor-pointer relative group",
                   outreach.status === 'sent' ? "border-blue-600" : "border-transparent"
                 )}
               >
                 <div className="flex justify-between items-start mb-1">
                   <h3 className="font-bold text-sm truncate pr-2">{outreach.job_title}</h3>
-                  <span className={cn(
-                    "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded",
-                    getStatusColor(outreach.status)
-                  )}>
-                    {outreach.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {outreach.status === 'draft' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-slate-400 hover:text-brand-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/new', { state: { editOutreachId: outreach.id } });
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
+                    <span className={cn(
+                      "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded",
+                      getStatusColor(outreach.status)
+                    )}>
+                      {outreach.status}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-xs text-slate-500 mb-2 truncate">
                   {outreach.company_name} • {outreach.recruiter_name || 'HR Team'}
@@ -146,7 +170,7 @@ export default function Dashboard() {
                     </span>
                   )}
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
