@@ -16,7 +16,8 @@ import {
   Trophy,
   ArrowRight,
   Globe,
-  Radar
+  Radar,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
@@ -78,7 +79,7 @@ const METRICS = [
 ];
 
 export default function ProjectsFeed() {
-  const [activeTab, setActiveTab] = useState<'discover' | 'my-pods' | 'ai-architect'>('discover');
+  const [activeTab, setActiveTab] = useState<'discover' | 'founder-dna' | 'market' | 'ai-architect'>('discover');
   const [activePodId, setActivePodId] = useState<string | null>(null);
 
   const activePod = MOCK_PODS.find(p => p.id === activePodId);
@@ -106,8 +107,8 @@ export default function ProjectsFeed() {
                <Button className="bg-brand-primary text-white shadow-lg shadow-brand-primary/20">
                  Join Team
                </Button>
-               <Button variant="outline" className="text-white border-white/10 hover:bg-white/5">
-                 Share
+               <Button variant="outline" className="text-white border-white/10 hover:bg-white/5 disabled:opacity-50">
+                 Enter War Room
                </Button>
              </div>
            </div>
@@ -165,6 +166,52 @@ export default function ProjectsFeed() {
                         <span className="text-xs font-bold text-slate-500 uppercase">{step.time}</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-gradient-to-br from-brand-primary/10 to-transparent border border-brand-primary/20 rounded-2xl p-6 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-20">
+                      <Cpu className="w-16 h-16 text-brand-primary" />
+                    </div>
+                    <div className="relative z-10">
+                      <h3 className="text-lg font-bold text-brand-primary mb-1">AI Autopilot Active</h3>
+                      <p className="text-sm text-slate-400 mb-6">Orchestrating 3 parallel workflows</p>
+                      
+                      <div className="space-y-3">
+                        <div className="flex bg-black/20 p-2 rounded-lg items-center gap-3 border border-white/5">
+                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-xs text-slate-300">Drafting PRD for MVP</span>
+                        </div>
+                        <div className="flex bg-black/20 p-2 rounded-lg items-center gap-3 border border-white/5">
+                          <div className="w-2 h-2 rounded-full bg-brand-primary animate-pulse" />
+                          <span className="text-xs text-slate-300">Sourcing Full Stack Eng profiles</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#131417]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">AI Employees</h3>
+                    <div className="space-y-3">
+                      {[
+                        { title: 'AI CTO', desc: 'Architecture & Code', active: true },
+                        { title: 'AI Growth Lead', desc: 'GTM Strategy', active: true },
+                        { title: 'AI Analyst', desc: 'Market Research', active: false }
+                      ].map((agent, i) => (
+                        <div key={i} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5 border-transparent hover:border-white/10 transition-colors">
+                           <div>
+                             <p className="font-bold text-white text-sm flex items-center gap-2">
+                               {agent.title} {agent.active && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                             </p>
+                             <p className="text-[10px] text-slate-400 uppercase tracking-wider">{agent.desc}</p>
+                           </div>
+                           <Button variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-white">
+                             <Settings className="w-3 h-3" />
+                           </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -232,7 +279,8 @@ export default function ProjectsFeed() {
         <div className="flex bg-white/5 border border-white/10 p-1.5 rounded-xl backdrop-blur-md">
           {[
             { id: 'discover', label: 'Global Pods' },
-            { id: 'my-pods', label: 'My Ecosystem' },
+            { id: 'founder-dna', label: 'Founder DNA' },
+            { id: 'market', label: 'Innovation Index' },
             { id: 'ai-architect', label: 'AI Architect' }
           ].map((tab) => (
             <button
@@ -402,9 +450,9 @@ export default function ProjectsFeed() {
           </motion.div>
         )}
 
-        {activeTab === 'my-pods' && (
+        {activeTab === 'founder-dna' && (
           <motion.div
-            key="my-pods"
+            key="founder-dna"
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
@@ -418,78 +466,159 @@ export default function ProjectsFeed() {
                     <img src="https://i.pravatar.cc/150?u=me" alt="Me" className="w-16 h-16 rounded-full border-2 border-white/20" />
                     <div>
                       <h3 className="text-xl font-bold text-white">Alex Developer</h3>
-                      <p className="text-sm text-brand-primary font-medium">Innovation Pioneer</p>
+                      <p className="text-sm text-brand-primary font-medium">Technical Architect</p>
                     </div>
                   </div>
-                  <div className="space-y-4 relative z-10">
-                    <div className="flex justify-between items-center bg-white/5 rounded-lg p-3">
-                      <span className="text-sm text-slate-400 font-medium">Builder Score</span>
-                      <span className="text-lg font-black text-white">4,291</span>
+                  <div className="space-y-4 relative z-10 mb-6">
+                    <div className="flex justify-between items-center bg-white/5 rounded-lg p-3 border border-white/5">
+                      <span className="text-sm text-slate-400 font-medium">Execution Consistency</span>
+                      <span className="text-lg font-black text-white">98th %</span>
                     </div>
-                    <div className="flex justify-between items-center bg-white/5 rounded-lg p-3">
-                      <span className="text-sm text-slate-400 font-medium">Collab Index</span>
-                      <span className="text-lg font-black text-emerald-400">Top 5%</span>
+                    <div className="flex justify-between items-center bg-white/5 rounded-lg p-3 border border-white/5">
+                      <span className="text-sm text-slate-400 font-medium">Collab Quality</span>
+                      <span className="text-lg font-black text-emerald-400">9.4/10</span>
                     </div>
                   </div>
+                  <Button className="w-full bg-white/10 text-white hover:bg-white/20">
+                    View Neural Profile
+                  </Button>
                </div>
 
                <div className="lg:col-span-2 bg-[#131417]/80 border border-white/10 rounded-2xl p-6 relative overflow-hidden backdrop-blur-xl">
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-brand-primary" /> Contribution Graph
+                    <Users className="w-5 h-5 text-brand-primary" /> Recommended Co-founders
                   </h3>
-                  <div className="flex flex-wrap gap-1">
-                    {Array.from({ length: 140 }).map((_, i) => {
-                       const intensity = Math.random();
-                       return (
-                         <div 
-                           key={i} 
-                           className={cn(
-                             "w-4 h-4 rounded-sm transition-all hover:scale-125 cursor-pointer",
-                             intensity > 0.8 ? "bg-brand-primary" : 
-                             intensity > 0.5 ? "bg-brand-primary/60" : 
-                             intensity > 0.2 ? "bg-brand-primary/30" : 
-                             "bg-white/5"
-                           )}
-                         />
-                       );
-                    })}
-                  </div>
-                  <div className="flex items-center justify-between mt-4 text-xs text-slate-500 font-medium uppercase tracking-wider">
-                     <span>Less</span>
-                     <div className="flex gap-1">
-                       <div className="w-3 h-3 rounded-sm bg-white/5" />
-                       <div className="w-3 h-3 rounded-sm bg-brand-primary/30" />
-                       <div className="w-3 h-3 rounded-sm bg-brand-primary/60" />
-                       <div className="w-3 h-3 rounded-sm bg-brand-primary" />
-                     </div>
-                     <span>More</span>
+                  <div className="space-y-4">
+                    {[
+                      { name: 'Sarah Chen', type: 'Product Strategist', match: '96%', gap: 'Fills GTM Gap', img: 'https://i.pravatar.cc/150?img=1' },
+                      { name: 'Mike Johnson', type: 'Operational Executor', match: '92%', gap: 'Fills Ops Gap', img: 'https://i.pravatar.cc/150?img=11' }
+                    ].map((user, i) => (
+                      <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-brand-primary/30 transition-colors cursor-pointer">
+                        <div className="flex items-center gap-4">
+                          <img src={user.img} className="w-10 h-10 rounded-full" alt="founder" />
+                          <div>
+                            <p className="font-bold text-white mb-0.5">{user.name}</p>
+                            <p className="text-xs text-slate-400">{user.type}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-black text-emerald-400">{user.match} Match</p>
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">{user.gap}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                </div>
             </div>
             
-            <h3 className="text-lg font-bold text-white mb-4">My Co-founded Pods</h3>
-            <div className="bg-[#131417] border border-white/5 rounded-2xl overflow-hidden hover:border-white/10 transition-all duration-500 p-6 flex flex-col md:flex-row items-center justify-between gap-6 cursor-pointer group">
-               <div>
-                 <h4 className="text-xl font-bold text-white mb-2 group-hover:text-brand-primary transition-colors">Quantum AI Agents</h4>
-                 <p className="text-sm text-slate-400">An ecosystem of self-improving agents.</p>
-               </div>
-               <div className="flex items-center gap-6">
-                 <div className="text-center">
-                   <p className="text-2xl font-black text-white">8</p>
-                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Members</p>
+            <h3 className="text-xl font-bold text-white mb-4 mt-12 flex items-center gap-2">
+               <Cpu className="w-5 h-5 text-purple-400" /> Founder DNA Archetypes
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+               {[
+                 { title: 'Visionary', desc: 'Identifies macro trends and shapes the 10-year thesis.', color: 'text-yellow-400' },
+                 { title: 'Systems Builder', desc: 'Creates scalable architectures and tech infra.', color: 'text-blue-400' },
+                 { title: 'Growth Hacker', desc: 'Finds unconventional distribution channels.', color: 'text-emerald-400' },
+                 { title: 'UX Architect', desc: 'Obsesses over product feel and user psychology.', color: 'text-pink-400' }
+               ].map((arch, i) => (
+                 <div key={i} className="bg-[#131417] border border-white/5 p-6 rounded-2xl hover:border-white/20 transition-all cursor-pointer group">
+                   <h4 className={cn("text-lg font-black mb-2 group-hover:scale-105 transition-transform origin-left", arch.color)}>{arch.title}</h4>
+                   <p className="text-sm text-slate-400">{arch.desc}</p>
                  </div>
-                 <div className="text-center">
-                   <p className="text-2xl font-black text-emerald-400">96%</p>
-                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Health</p>
-                 </div>
-                 <Button className="bg-white/10 text-white hover:bg-white/20 transition-all">
-                   Enter Workspace
-                 </Button>
-               </div>
+               ))}
             </div>
-            
           </motion.div>
         )}
+        {activeTab === 'market' && (
+          <motion.div
+            key="market"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-6 relative z-10"
+          >
+             <div className="flex items-center justify-between mb-8">
+               <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                 <TrendingUp className="w-5 h-5 text-emerald-400" /> Innovation Stock Market
+               </h2>
+               <div className="flex gap-2">
+                 <Badge variant="outline" className="bg-emerald-400/10 text-emerald-400 border-emerald-400/20">Market Open</Badge>
+                 <Badge variant="outline" className="bg-white/5 text-slate-300 border-white/10">Global Index: 14,291 ▲</Badge>
+               </div>
+             </div>
+
+             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+               {/* Leaderboard or hot stocks */}
+               <div className="lg:col-span-3 bg-[#131417]/80 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
+                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Trending Ventures</h3>
+                 <div className="space-y-2">
+                   <div className="grid grid-cols-12 gap-4 text-xs font-bold text-slate-500 uppercase tracking-wider px-4 py-2 border-b border-white/5">
+                     <div className="col-span-4">Venture</div>
+                     <div className="col-span-2 text-right">Momentum</div>
+                     <div className="col-span-2 text-right">Backers</div>
+                     <div className="col-span-2 text-right">Execution</div>
+                     <div className="col-span-2 text-right">Price Action</div>
+                   </div>
+                   {[
+                     { name: 'Quantum AI Agents', ticker: '$QAA', momentum: '98.4', backers: '1.2k', exec: 'A+', trend: '+14.2%', up: true },
+                     { name: 'Vortex Finance', ticker: '$VRX', momentum: '84.2', backers: '420', exec: 'B+', trend: '+4.1%', up: true },
+                     { name: 'Synthetix Bio', ticker: '$SYN', momentum: '92.1', backers: '891', exec: 'S', trend: '+22.5%', up: true },
+                     { name: 'Aether OS', ticker: '$ATH', momentum: '41.5', backers: '112', exec: 'C-', trend: '-8.4%', up: false },
+                     { name: 'Nexus API', ticker: '$NEX', momentum: '76.8', backers: '2.1k', exec: 'A', trend: '+2.1%', up: true },
+                   ].map((stock, i) => (
+                     <div key={i} className="grid grid-cols-12 gap-4 items-center px-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-white/10">
+                        <div className="col-span-4">
+                          <p className="font-bold text-white leading-tight">{stock.name}</p>
+                          <p className="text-xs text-brand-primary font-mono">{stock.ticker}</p>
+                        </div>
+                        <div className="col-span-2 text-right font-mono text-white font-bold">{stock.momentum}</div>
+                        <div className="col-span-2 text-right font-mono text-slate-400">{stock.backers}</div>
+                        <div className="col-span-2 text-right">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-bold", stock.exec.includes('S') || stock.exec.includes('A') ? "bg-emerald-400/20 text-emerald-400" : stock.exec.includes('B') ? "bg-blue-400/20 text-blue-400" : "bg-red-400/20 text-red-400")}>{stock.exec}</span>
+                        </div>
+                        <div className={cn("col-span-2 text-right font-mono font-bold flex justify-end items-center gap-1", stock.up ? "text-emerald-400" : "text-red-400")}>
+                          {stock.trend} {stock.up ? '▲' : '▼'}
+                        </div>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+
+               {/* My Portfolio / Reputation */}
+               <div className="space-y-6">
+                 <div className="bg-[#131417]/80 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
+                   <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">My Ecosystem Rep</h3>
+                   <div className="text-4xl font-black text-white mb-1"><span className="text-brand-primary">◈</span> 428.5k</div>
+                   <p className="text-xs text-emerald-400 font-bold mb-6">+12.4k this week</p>
+                   <Button className="w-full bg-brand-primary text-white hover:bg-brand-primary/90 shadow-lg shadow-brand-primary/20">
+                     Back New Venture
+                   </Button>
+                 </div>
+
+                 <div className="bg-[#131417]/80 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
+                   <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Top Predictors</h3>
+                   <div className="space-y-4">
+                     {[
+                        { name: 'Elena R.', accuracy: '94%', rank: 1 },
+                        { name: 'Dr. Zhang', accuracy: '89%', rank: 2 },
+                        { name: 'Marcus T.', accuracy: '86%', rank: 3 }
+                     ].map((user, i) => (
+                       <div key={i} className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                           <span className="text-xs font-bold text-slate-600">#{user.rank}</span>
+                           <p className="text-sm font-bold text-white">{user.name}</p>
+                         </div>
+                         <span className="text-xs font-bold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-md">{user.accuracy} hit rate</span>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               </div>
+             </div>
+          </motion.div>
+        )}
+
         {activeTab === 'ai-architect' && (
           <motion.div
             key="ai-architect"

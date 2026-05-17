@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useMatch } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, UserCircle, Settings, LogOut, Signal, Briefcase, Compass } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, UserCircle, Settings, LogOut, Signal, Briefcase, Compass, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
@@ -56,7 +56,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Compass, label: 'Projects Feed', path: '/projects' },
+    { icon: Compass, label: 'InnovationOS', path: '/projects' },
     { icon: PlusCircle, label: 'New Outreach', path: '/new' },
     { icon: UserCircle, label: 'Profile', path: '/profile' },
     { icon: Settings, label: 'Settings', path: '/settings' },
@@ -80,15 +80,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               )}
               <div className="flex flex-col">
                 <span className={cn("font-bold text-sm tracking-tight line-clamp-1", isInnovation ? "text-slate-200" : "text-slate-800")}>{companyData.name}</span>
-                <span className={cn("text-[10px] font-medium uppercase tracking-widest", isInnovation ? "text-slate-500" : "text-slate-400")}>Active Outreach</span>
+                <span className={cn("text-[10px] font-medium uppercase tracking-widest", isInnovation ? "text-slate-500" : "text-slate-400")}>{isInnovation ? "Core Node" : "Active Outreach"}</span>
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-500">
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center font-bold shadow-sm", isInnovation ? "bg-white/10 text-white" : "bg-brand-primary text-white")}>
-                S
+              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center font-bold shadow-sm", isInnovation ? "bg-brand-primary text-white" : "bg-brand-primary text-white")}>
+                {isInnovation ? <Cpu className="w-4 h-4 text-white" /> : "S"}
               </div>
-              <span className={cn("font-bold text-xl tracking-tight", isInnovation ? "text-slate-200" : "text-slate-800")}>SignalHire AI</span>
+              <span className={cn("font-bold text-xl tracking-tight", isInnovation ? "text-slate-200" : "text-slate-800")}>{isInnovation ? "InnovationOS" : "SignalHire AI"}</span>
             </div>
           )}
         </div>
