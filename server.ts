@@ -9,11 +9,25 @@ import multer from "multer";
 import mammoth from "mammoth";
 import { createRequire } from "module";
 import UserAgent from "user-agents";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const require = createRequire(import.meta.url);
 const pdfModule = require("pdf-parse");
 
 dotenv.config();
+
+// GenAI setup
+let ai: GoogleGenAI | null = null;
+if (process.env.GEMINI_API_KEY) {
+  ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
+}
 
 // pdf-parse normalization
 const parsePDF = typeof pdfModule === 'function' ? pdfModule : pdfModule.default || pdfModule;
@@ -419,6 +433,96 @@ async function startServer() {
       res.json({ message: "Resume received" });
     } catch (error) {
       res.status(500).json({ error: "Failed to process resume" });
+    }
+  });
+
+  // InnovationOS: Venture Spawning
+  app.post("/api/spawn-venture", async (req, res) => {
+    if (!ai) {
+      return res.status(500).json({ error: "Gemini AI not initialized. Check GEMINI_API_KEY." });
+    }
+    const { problemStatement } = req.body;
+    if (!problemStatement) {
+      return res.status(400).json({ error: "problemStatement is required" });
+    }
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `You are an elite autonomous venture generation AI. The user has provided the following problem statement or thesis:
+"${problemStatement}"
+
+Instantly generate a highly detailed, technologically advanced, and credible startup blueprint. Provide the response as a JSON object matching this exact schema:
+{
+  "name": "Startup Name",
+  "thesis": "A 1-2 sentence compelling thesis statement",
+  "market": "TAM / Overview",
+  "tam": "Estimated TAM in $ (e.g. $120B)",
+  "sam": "Estimated SAM in $",
+  "som": "Estimated SOM in $",
+  "competitors": ["Comp 1", "Comp 2", "Comp 3"],
+  "timeline": "e.g., 14 Days to MVP",
+  "valuation": "Estimated initial valuation (e.g. $4.5M)",
+  "dna": ["Skill 1", "Skill 2"],
+  "verdict": "A brief sentence on viability",
+  "score": 88
+}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              thesis: { type: Type.STRING },
+              market: { type: Type.STRING },
+              tam: { type: Type.STRING },
+              sam: { type: Type.STRING },
+              som: { type: Type.STRING },
+              competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
+              timeline: { type: Type.STRING },
+              valuation: { type: Type.STRING },
+              dna: { type: Type.ARRAY, items: { type: Type.STRING } },
+              verdict: { type: Type.STRING },
+              score: { type: Type.NUMBER }
+            },
+            required: ["name", "thesis", "market", "tam", "sam", "som", "competitors", "timeline", "valuation", "dna", "verdict", "score"]
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text?.trim() || "{}");
+      res.json(data);
+    } catch (e: any) {
+      console.error("Venture Spawn Error:", e);
+      res.status(500).json({ error: e.message || "Failed to generate venture" });
+    }
+  });
+
+  // InnovationOS: AI Execution Engine (CTO, PM, Growth, etc)
+  app.post("/api/ai-execute", async (req, res) => {
+    if (!ai) {
+      return res.status(500).json({ error: "Gemini AI not initialized. Check GEMINI_API_KEY." });
+    }
+    const { role, task, context } = req.body;
+    if (!role || !task) {
+      return res.status(400).json({ error: "role and task are required" });
+    }
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview", // Complex execution
+        contents: `You are the ${role} of an elite startup.
+Your context: ${context}
+
+Your task: ${task}
+
+Provide your output as detailed, high-quality Markdown, ready to be presented in a command center.`
+      });
+
+      res.json({ output: response.text });
+    } catch (e: any) {
+      console.error("AI Execute Error:", e);
+      res.status(500).json({ error: e.message || "Failed to execute AI task" });
     }
   });
 

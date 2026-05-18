@@ -26,6 +26,18 @@ body {
   @apply bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm;
 }
 
+.markdown-body h1 { @apply text-2xl font-bold mb-4 text-white; }
+.markdown-body h2 { @apply text-xl font-bold mb-3 mt-6 text-white; }
+.markdown-body h3 { @apply text-lg font-bold mb-2 mt-4 text-slate-200; }
+.markdown-body p { @apply mb-4 text-slate-300; }
+.markdown-body ul { @apply list-disc pl-5 mb-4 text-slate-300; }
+.markdown-body ol { @apply list-decimal pl-5 mb-4 text-slate-300; }
+.markdown-body li { @apply mb-1; }
+.markdown-body strong { @apply font-bold text-white; }
+.markdown-body code { @apply bg-white/10 px-1.5 py-0.5 rounded text-brand-primary; }
+.markdown-body pre { @apply bg-black/60 border border-white/10 p-4 rounded-xl overflow-x-auto mb-4; }
+.markdown-body pre code { @apply bg-transparent text-slate-300 p-0 rounded-none border-none; }
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
