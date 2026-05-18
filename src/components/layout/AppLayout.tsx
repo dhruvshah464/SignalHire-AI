@@ -65,9 +65,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isInnovation = location.pathname === '/projects';
 
   return (
-    <div className={cn("flex h-screen", isInnovation ? "bg-[#0a0a0b]" : "bg-slate-50")}>
+    <div className={cn("flex h-screen", isInnovation ? "bg-[#050505]" : "bg-slate-50")}>
       {/* Sidebar */}
-      <aside className={cn("w-64 border-r flex flex-col shadow-sm transition-all duration-300 z-50", isInnovation ? "bg-[#131417] border-white/5" : "border-brand-border bg-white")}>
+      <aside className={cn("w-64 border-r flex flex-col shadow-sm transition-all duration-300 z-50", isInnovation ? "bg-[#0a0c10] border-white/5" : "border-brand-border bg-white")}>
         <div className="p-6">
           {companyData ? (
             <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-500">
