@@ -1,14 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useMatch } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, UserCircle, Settings, LogOut, Signal, Briefcase, Compass, Cpu } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, UserCircle, Settings, LogOut, Signal, Briefcase, Compass, Cpu, Bookmark, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
+import { getSavedUserProfile, subscribeToProfileChanges } from '@/lib/profile';
+import { UserProfile } from '@/types/profile';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const match = useMatch('/outreach/:id');
   const [companyData, setCompanyData] = useState<{name: string, logo?: string} | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => getSavedUserProfile());
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileChanges((updated) => {
+      setUserProfile(updated);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     async function fetchCompany() {
@@ -56,11 +66,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+    { icon: Bookmark, label: 'Templates', path: '/templates' },
     { icon: Compass, label: 'InnovationOS', path: '/projects' },
     { icon: PlusCircle, label: 'New Outreach', path: '/new' },
     { icon: UserCircle, label: 'Profile', path: '/profile' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
+
 
   const isInnovation = location.pathname === '/projects';
 
@@ -118,13 +130,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className={cn("p-4 border-t", isInnovation ? "border-white/5" : "border-brand-border")}>
-          <div className={cn("flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors", isInnovation ? "hover:bg-white/5" : "hover:bg-slate-50")}>
-            <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300"></div>
-            <div>
-              <p className={cn("text-sm font-semibold", isInnovation ? "text-slate-300" : "text-slate-700")}>Sarah Chen</p>
-              <p className={cn("text-xs font-medium", isInnovation ? "text-slate-500" : "text-brand-primary")}>Pro Plan Active</p>
+          <Link to="/profile" className={cn("flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors group", isInnovation ? "hover:bg-white/5" : "hover:bg-slate-50")}>
+            <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 overflow-hidden shrink-0">
+              {userProfile.avatarUrl ? (
+                <img src={userProfile.avatarUrl} alt={userProfile.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-brand-primary text-white text-xs font-bold flex items-center justify-center">
+                  {userProfile.name?.slice(0, 2) || 'SC'}
+                </div>
+              )}
             </div>
-          </div>
+            <div className="min-w-0 flex-1">
+              <p className={cn("text-sm font-semibold truncate group-hover:text-brand-primary transition-colors", isInnovation ? "text-slate-300" : "text-slate-700")}>
+                {userProfile.name || 'Sarah Chen'}
+              </p>
+              <p className={cn("text-xs font-medium truncate", isInnovation ? "text-slate-500" : "text-brand-primary")}>
+                {userProfile.headline ? userProfile.headline.split('&')[0].trim() : 'Pro Plan Active'}
+              </p>
+            </div>
+          </Link>
         </div>
       </aside>
 
@@ -137,9 +161,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               {navItems.find(i => i.path === location.pathname)?.label || 'Outreach'}
             </h1>
             <div className="flex items-center gap-4">
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-200"></div>
-              </div>
+              <Link to="/profile" className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-100 transition-colors">
+                <span className="text-xs font-semibold text-slate-700 hidden sm:inline-block">{userProfile.name}</span>
+                <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 overflow-hidden shadow-xs">
+                  {userProfile.avatarUrl ? (
+                    <img src={userProfile.avatarUrl} alt={userProfile.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-brand-primary text-white text-xs font-bold flex items-center justify-center">
+                      {userProfile.name?.slice(0, 2) || 'SC'}
+                    </div>
+                  )}
+                </div>
+              </Link>
             </div>
           </header>
         )}

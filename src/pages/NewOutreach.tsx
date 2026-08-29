@@ -2,14 +2,19 @@ import React, { useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertCircle, CheckCircle2, ChevronRight, Briefcase, FileText, Sparkles, Loader2, ArrowLeft, Upload, X, Trophy, ThumbsDown, Lightbulb, Target, Pencil, Save, Mail, Search, ExternalLink } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Briefcase, FileText, Sparkles, Loader2, ArrowLeft, Upload, X, Trophy, ThumbsDown, Lightbulb, Target, Pencil, Save, Mail, Search, ExternalLink, Bookmark } from 'lucide-react';
 
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { generateOutreach, parseResume, extractJobFromText } from '@/lib/gemini';
+import { getSavedUserProfile } from '@/lib/profile';
+import { getSavedTemplates, renderTemplate } from '@/lib/templateStorage';
+import { OutreachTemplate } from '@/types/template';
+import { MissingSkillsInterviewPrepCard } from '@/components/interview/MissingSkillsInterviewPrepCard';
 import { z } from 'zod';
 import { toast } from 'sonner';
+
 
 const jobSchema = z.object({
   url: z.string().min(1, "Job URL is required").url("Please enter a valid URL (including https://)")
@@ -45,8 +50,31 @@ export default function NewOutreach() {
   const navigate = useNavigate();
   const location = useLocation();
   const editOutreachId = location.state?.editOutreachId;
+  const prefilledJob = location.state?.prefilledJob;
 
   React.useEffect(() => {
+    if (prefilledJob) {
+      setJobUrl(prefilledJob.url || '');
+      setJobData(prefilledJob);
+      // Auto-load saved candidate profile if available
+      const savedProfile = getSavedUserProfile();
+      if (savedProfile && savedProfile.skills?.length > 0) {
+        setResumeData({
+          name: savedProfile.name,
+          skills: savedProfile.skills,
+          experience: savedProfile.experience.map(e => ({
+            role: e.role,
+            company: e.company,
+            duration: e.duration,
+            description: e.highlights?.join('. ') || e.description
+          }))
+        });
+      }
+      setStep(2);
+      toast.info(`Loaded job details for ${prefilledJob.title} at ${prefilledJob.company}`);
+      return;
+    }
+
     async function loadDraft() {
       if (!editOutreachId) return;
       setLoading(true);
@@ -290,6 +318,43 @@ export default function NewOutreach() {
     }
   };
 
+  const applyTemplateToOutreach = (tmpl: OutreachTemplate) => {
+    const profile = getSavedUserProfile();
+    const recruiterFirstName = jobData?.recruiter_name ? jobData.recruiter_name.split(' ')[0] : 'there';
+    const variables: Record<string, string> = {
+      company_name: jobData?.company || 'your team',
+      job_title: jobData?.title || 'this role',
+      seniority_level: jobData?.seniority || '',
+      workplace_type: jobData?.workplace_type || jobData?.location || 'remote/hybrid',
+      company_product: jobData?.company_product || jobData?.company || 'your products',
+      recent_company_news: '',
+      recruiter_name: jobData?.recruiter_name || 'Hiring Team',
+      recruiter_first_name: recruiterFirstName,
+      recruiter_title: 'Hiring Team',
+      key_requirement_1: jobData?.must_have_skills?.[0] || 'core technical execution',
+      key_requirement_2: jobData?.must_have_skills?.[1] || 'high-scale systems',
+      candidate_name: resumeData?.name || profile.name || 'Candidate',
+      candidate_headline: profile.headline || 'Software Engineer',
+      years_experience: '5+',
+      current_company: resumeData?.experience?.[0]?.company || profile.experience?.[0]?.company || 'my current company',
+      top_matching_skill: resumeData?.skills?.[0] || profile.skills?.[0] || 'core engineering',
+      key_achievement: resumeData?.experience?.[0]?.description || profile.experience?.[0]?.highlights?.[0] || 'delivered high-impact systems',
+      relevant_project: 'recent production initiatives',
+      call_to_action: 'Are you open to a brief 10-minute sync this week?',
+      portfolio_url: profile.links?.portfolio || '',
+      github_url: profile.links?.github || '',
+      linkedin_url: profile.links?.linkedin || ''
+    };
+
+    const rendered = renderTemplate({ subject: tmpl.subject, body: tmpl.body }, variables);
+    setEditableMessages((prev: any) => ({
+      ...prev,
+      email_subject: rendered.subject,
+      cold_email: rendered.body
+    }));
+    toast.success(`Applied template "${tmpl.title}" with job placeholders resolved!`);
+  };
+
   const finalizeOutreach = async () => {
     setLoading(true);
     setError(null);
@@ -297,6 +362,12 @@ export default function NewOutreach() {
       const outreachData = await generateOutreach(jobData, resumeData);
       setOutreachResult(outreachData);
       setEditableMessages({ ...outreachData });
+      
+      const prefilledTmpl = location.state?.prefilledTemplate;
+      if (prefilledTmpl) {
+        applyTemplateToOutreach(prefilledTmpl);
+      }
+      
       setStep(4);
       toast.success('Outreach sequence generated!');
     } catch (err: any) {
@@ -306,6 +377,7 @@ export default function NewOutreach() {
       setLoading(false);
     }
   };
+
 
   const saveCampaign = async () => {
     setLoading(true);
@@ -448,23 +520,31 @@ export default function NewOutreach() {
           {step === 1 && (
             <div className="space-y-6">
               <div className="space-y-2">
-                <h2 className="text-xl font-bold">Find Job</h2>
-                <p className="text-slate-500">Search for jobs directly or paste a link from any job board.</p>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold">Find Job Opportunity</h2>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-brand-primary border border-blue-200/80 rounded-full text-xs font-semibold shadow-2xs">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-primary" />
+                    Google Search Grounding Enabled
+                  </span>
+                </div>
+                <p className="text-slate-500 text-sm">
+                  Search active web postings with real-time Google Search Grounding or paste a link from any public career portal.
+                </p>
               </div>
 
               <Tabs value={searchTab} onValueChange={(v) => setSearchTab(v as 'search' | 'url')} className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="search"><Search className="w-4 h-4 mr-2" /> Search Jobs</TabsTrigger>
-                  <TabsTrigger value="url"><ExternalLink className="w-4 h-4 mr-2" /> Paste URL</TabsTrigger>
+                  <TabsTrigger value="search"><Search className="w-4 h-4 mr-2" /> Live Web Search (Google Grounded)</TabsTrigger>
+                  <TabsTrigger value="url"><ExternalLink className="w-4 h-4 mr-2" /> Scrape Job URL</TabsTrigger>
                 </TabsList>
                 <TabsContent value="search" className="space-y-4">
                   <div className="flex gap-3">
                     <div className="flex-1 space-y-1">
                       <input 
                         type="text" 
-                        placeholder="E.g. Frontend Developer at Google..." 
+                        placeholder="E.g. Senior AI Research Engineer at Anthropic, Staff Frontend at Stripe..." 
                         className={cn(
-                          "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium",
+                          "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium text-sm",
                           fieldErrors.search ? "border-red-300 bg-red-50" : "border-slate-200"
                         )}
                         value={searchQuery}
@@ -476,20 +556,33 @@ export default function NewOutreach() {
                     <Button 
                       onClick={searchJobs} 
                       disabled={isSearching}
-                      className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0"
+                      className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0 font-semibold gap-1.5"
                     >
-                      {isSearching && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      Search
+                      {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      <span>{isSearching ? 'Grounding Web...' : 'Live Search'}</span>
                     </Button>
                   </div>
                   
                   {searchResults.length > 0 && (
-                    <div className="mt-4 border border-slate-100 rounded-xl max-h-[300px] overflow-y-auto bg-slate-50 divide-y divide-slate-100">
+                    <div className="mt-4 border border-slate-200/90 rounded-2xl max-h-[360px] overflow-y-auto bg-slate-50/70 divide-y divide-slate-100 shadow-2xs">
                       {searchResults.map((result: any) => (
                         <div key={result.job_id} className="p-4 hover:bg-white transition-colors cursor-pointer group" onClick={() => selectSearchResult(result)}>
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-bold text-sm text-slate-800 group-hover:text-brand-primary transition-colors">{result.job_title}</h4>
-                            <div className="flex items-center gap-2">
+                          <div className="flex justify-between items-start mb-1.5">
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 group-hover:text-brand-primary transition-colors flex items-center gap-1.5">
+                                {result.job_title}
+                                {result.workplace_type && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                                    {result.workplace_type}
+                                  </span>
+                                )}
+                              </h4>
+                              <p className="text-xs font-semibold text-slate-600 mt-0.5">
+                                {result.employer_name} {result.job_location ? `• ${result.job_location}` : ''}
+                                {result.salary_range && <span className="text-emerald-700 font-bold ml-1.5">({result.salary_range})</span>}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
                               {result.job_publisher && (
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-100 px-2 py-1 rounded">
                                   {result.job_publisher}
@@ -510,8 +603,16 @@ export default function NewOutreach() {
                               )}
                             </div>
                           </div>
-                          <p className="text-xs font-medium text-slate-500">{result.employer_name}</p>
-                          <p className="text-xs text-slate-400 mt-2 line-clamp-2">{result.job_description}</p>
+                          <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">{result.job_description}</p>
+                          {result.must_have_skills && result.must_have_skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {result.must_have_skills.map((skill: string, idx: number) => (
+                                <span key={idx} className="text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/60 px-2 py-0.5 rounded-md">
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -522,9 +623,9 @@ export default function NewOutreach() {
                     <div className="flex-1 space-y-1">
                       <input 
                         type="url" 
-                        placeholder="https://www.linkedin.com/jobs/view/..." 
+                        placeholder="https://www.linkedin.com/jobs/view/... or Greenhouse, Lever, Workday" 
                         className={cn(
-                          "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium",
+                          "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-brand-primary/20 transition-all font-medium text-sm",
                           fieldErrors.url ? "border-red-300 bg-red-50" : "border-slate-200"
                         )}
                         value={jobUrl}
@@ -538,15 +639,18 @@ export default function NewOutreach() {
                     <Button 
                       onClick={scrapeJob} 
                       disabled={loading}
-                      className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0"
+                      className="bg-brand-primary hover:bg-brand-primary/90 h-12 py-3 px-6 shrink-0 font-semibold gap-1.5"
                     >
                       {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      {jobData ? "Re-Import Job" : "Import Job"}
+                      {jobData ? "Re-Import Job" : "Scrape & Ground"}
                     </Button>
                   </div>
                   {!jobData && (
-                    <div className="pt-4 border-t border-dashed border-slate-200">
-                      <p className="text-xs text-slate-400">Supported: LinkedIn, Glassdoor, Indeed, and most company career pages.</p>
+                    <div className="pt-4 border-t border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-400">
+                      <span>Supported: LinkedIn, Glassdoor, Indeed, Lever, Greenhouse, Workday, and custom career portals.</span>
+                      <span className="text-blue-600 font-medium flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Grounded Scraper
+                      </span>
                     </div>
                   )}
                 </TabsContent>
@@ -555,7 +659,15 @@ export default function NewOutreach() {
               {jobData && (
                 <div className="space-y-4 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-lg">Job Details & Recruiter</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-lg">Job Details & Recruiter</h3>
+                      {jobData.isGoogleSearchGrounded && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[11px] font-semibold flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-brand-primary" />
+                          Grounded
+                        </span>
+                      )}
+                    </div>
                     {jobData.url && (
                       <Button 
                         size="sm"
@@ -621,8 +733,57 @@ export default function NewOutreach() {
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="space-y-2">
                 <h2 className="text-xl font-bold">Your Professional Profile</h2>
-                <p className="text-slate-500">Upload your resume (PDF/DOCX) or paste your key highlights. AI will extract the details.</p>
+                <p className="text-slate-500">Upload your resume (PDF/DOCX), paste highlights, or use your saved parsed profile.</p>
               </div>
+
+              {/* Quick Saved Profile Option */}
+              {(() => {
+                const savedProfile = getSavedUserProfile();
+                if (savedProfile && savedProfile.skills?.length > 0) {
+                  return (
+                    <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50/50 border border-blue-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white border border-blue-200 flex items-center justify-center text-brand-primary shadow-2xs font-bold shrink-0">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-slate-900">{savedProfile.name}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">Saved Profile</span>
+                          </div>
+                          <p className="text-xs text-slate-600 line-clamp-1">
+                            {savedProfile.headline} • {savedProfile.skills.length} skills • {savedProfile.experience.length} experiences
+                          </p>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setResumeData({
+                            name: savedProfile.name,
+                            skills: savedProfile.skills,
+                            experience: savedProfile.experience.map(e => ({
+                              role: e.role,
+                              company: e.company,
+                              duration: e.duration,
+                              description: e.highlights?.join('. ') || e.description
+                            }))
+                          });
+                          toast.success(`Loaded saved profile for ${savedProfile.name}!`);
+                          setStep(3);
+                        }}
+                        className="bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold text-xs h-8 px-3.5 shrink-0 gap-1.5 shadow-xs"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Use Saved Profile</span>
+                      </Button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {fieldErrors.text && (
                 <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-3 text-red-600 text-sm font-medium animate-in fade-in slide-in-from-top-2">
@@ -849,7 +1010,38 @@ export default function NewOutreach() {
                     </ul>
                    </div>
                 )}
+
+                {outreachResult?.search_insights && (
+                   <div className="p-6 rounded-2xl border bg-purple-50 border-purple-100">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Sparkles className="w-6 h-6 text-purple-600" />
+                      <h4 className="font-bold text-slate-900">Search Insights</h4>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      {outreachResult.search_insights}
+                    </p>
+                   </div>
+                )}
               </div>
+
+              {/* Missing Skills AI Interview Prep Card */}
+              {((outreachResult?.improvementSuggestions && outreachResult.improvementSuggestions.length > 0) || (jobData?.skills && jobData.skills.length > 0)) && (
+                <MissingSkillsInterviewPrepCard
+                  missingSkills={(outreachResult?.improvementSuggestions || jobData?.skills || []).slice(0, 5).map((s: string) => ({
+                    name: s,
+                    priority: 'High',
+                    recommendation: 'Targeted gap defense for candidate profile.'
+                  }))}
+                  jobDetails={{
+                    title: jobData?.title,
+                    company: jobData?.company,
+                    seniority: jobData?.seniority || 'Mid-Senior',
+                    workplaceType: jobData?.location?.toLowerCase().includes('remote') ? 'Remote' : 'Hybrid',
+                    summary: jobData?.description
+                  }}
+                  defaultExpanded={false}
+                />
+              )}
 
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -859,12 +1051,34 @@ export default function NewOutreach() {
 
                 {/* Cold Email */}
                 <Card className="border border-slate-200 overflow-hidden">
-                  <div className="bg-slate-50 px-4 py-3 border-b flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Cold Email & Subject</span>
-                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={() => setEditingField(editingField?.type === 'cold_email' ? null : { type: 'cold_email' })}>
-                      {editingField?.type === 'cold_email' ? <><Save className="w-3 h-3" /> Finish</> : <><Pencil className="w-3 h-3" /> Edit</>}
-                    </Button>
+                  <div className="bg-slate-50 px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Cold Email & Subject</span>
+                      <select
+                        onChange={(e) => {
+                          const tmpls = getSavedTemplates();
+                          const found = tmpls.find(t => t.id === e.target.value);
+                          if (found) applyTemplateToOutreach(found);
+                        }}
+                        defaultValue=""
+                        className="text-[11px] font-semibold bg-white border border-slate-200 rounded-md px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                      >
+                        <option value="" disabled>Apply Custom Template...</option>
+                        {getSavedTemplates().map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.title} ({t.targetAudience})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={() => setEditingField(editingField?.type === 'cold_email' ? null : { type: 'cold_email' })}>
+                        {editingField?.type === 'cold_email' ? <><Save className="w-3 h-3" /> Finish</> : <><Pencil className="w-3 h-3" /> Edit</>}
+                      </Button>
+                    </div>
                   </div>
+
                   <CardContent className="p-0">
                     {editingField?.type === 'cold_email' ? (
                       <div className="p-4 space-y-4">

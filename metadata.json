@@ -1,6 +1,6 @@
 {
   "name": "InnovationOS",
-  "description": "The world's first AI-native Venture Civilization Layer. Autonomous startup infrastructure with real Gemini execution.",
+  "description": "AI-native job intelligence and outreach platform with Google Search grounding, cold email generation, and dynamic placeholder template management.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

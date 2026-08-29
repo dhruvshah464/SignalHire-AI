@@ -30,7 +30,7 @@ export type Outreach = {
       reply_count: number;
     }[];
   };
-  status: 'draft' | 'sent' | 'replied' | 'closed';
+  status: 'draft' | 'sent' | 'replied' | 'interview' | 'interviewing' | 'closed';
   next_follow_up_at?: string | null;
   last_follow_up_index?: number; // -1: none, 0: first follow-up, etc.
   notes: string;

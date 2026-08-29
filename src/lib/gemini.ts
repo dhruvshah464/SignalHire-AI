@@ -1,178 +1,165 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { JobAnalysisResult } from '@/types/jobAnalysis';
 
-const getAI = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing. Please check the "Settings > Secrets" panel in AI Studio and ensure your API key is correctly configured.');
+export const analyzeJobSkills = async (params: {
+  url?: string;
+  keywords?: string;
+  rawDescription?: string;
+  userProfile?: any;
+}): Promise<JobAnalysisResult> => {
+  const response = await fetch('/api/analyze-job-skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to analyze job skills");
   }
-  return new GoogleGenAI({ apiKey });
+  return response.json();
+};
+
+export const scrapeJobUrl = async (url: string) => {
+  const response = await fetch('/api/scrape-job', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url })
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to scrape target job posting");
+  }
+  return response.json();
+};
+
+export const searchJobsGrounded = async (query: string, location?: string) => {
+  const params = new URLSearchParams({ query });
+  if (location) params.append('location', location);
+  const response = await fetch(`/api/search-jobs?${params.toString()}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to search job listings");
+  }
+  return response.json();
 };
 
 export const extractJobFromText = async (text: string) => {
-  const ai = getAI();
-  const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
-    contents: `Extract job details from this text input. 
-    Return ONLY a JSON object with: { "title": string, "company": string, "description": string, "recruiter_name": string, "recruiter_url": string }.
-    If not found, use logical guesses based on the content or leave empty.
-    
-    INPUT: ${text}`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          company: { type: Type.STRING },
-          description: { type: Type.STRING },
-          recruiter_name: { type: Type.STRING, description: "Optional name of the recruiter or contact person if mentioned" },
-          recruiter_url: { type: Type.STRING, description: "Optional LinkedIn or social URL of the recruiter if mentioned" }
-        }
-      }
-    }
+  const response = await fetch('/api/extract-job', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
   });
-
-  if (!response.text) {
-    throw new Error("Gemini returned an empty response. Please try again.");
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to extract job details");
   }
-  return JSON.parse(response.text);
+  return response.json();
 };
 
 export const parseResume = async (resumeText: string) => {
-  const ai = getAI();
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Parse the following resume text into a structured JSON format:
-    ${resumeText}
-    `,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          skills: { type: Type.ARRAY, items: { type: Type.STRING } },
-          experience: { 
-            type: Type.ARRAY, 
-            items: { 
-              type: Type.OBJECT,
-              properties: {
-                role: { type: Type.STRING },
-                company: { type: Type.STRING },
-                duration: { type: Type.STRING }
-              }
-            } 
-          }
-        }
-      }
-    }
+  const response = await fetch('/api/parse-resume-json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resumeText })
   });
-
-  if (!response.text) {
-    throw new Error("Gemini returned an empty response. Please try again.");
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to parse resume");
   }
-  return JSON.parse(response.text);
+  return response.json();
 };
 
 export const generateOutreach = async (jobData: any, resumeData: any, recruiterPost?: string) => {
-  const ai = getAI();
-  const prompt = `
-    Job Data: ${JSON.stringify(jobData)}
-    Candidate Data: ${JSON.stringify(resumeData)}
-    ${recruiterPost ? `Recruiter's Recent Post: ${recruiterPost}` : ''}
-
-    Task: Generate a hyper-personalized cold email and LinkedIn DM.
-    If a recruiter post is provided, reference it naturally.
-    Keep the tone professional but engaging.
-  `;
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          email_subject: { type: Type.STRING },
-          cold_email: { type: Type.STRING },
-          linkedin_dm: { type: Type.STRING },
-          linkedin_connection_request: { 
-            type: Type.STRING,
-            description: "A short, personalized LinkedIn connection request (max 300 characters)"
-          },
-          follow_ups: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING },
-            description: "A sequence of 3 follow-up messages"
-          },
-          matchScore: { 
-            type: Type.NUMBER,
-            description: "A score from 0-100 indicating how well the candidate matches the job"
-          },
-          improvementSuggestions: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Suggestions for improving the resume to better match this specific job"
-          }
-        }
-      }
-    }
+  const response = await fetch('/api/generate-outreach', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobData, resumeData, recruiterPost })
   });
-
-  if (!response.text) {
-    throw new Error("Gemini returned an empty response. Please try again.");
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to generate outreach");
   }
-  return JSON.parse(response.text);
+  return response.json();
 };
 
 export const simulateRecruiterChat = async (history: { role: 'user' | 'model', text: string }[], jobData: any) => {
-  const ai = getAI();
-  const chat = ai.chats.create({
-    model: "gemini-3-flash-preview",
-    config: {
-      systemInstruction: `You are a tough but fair technical recruiter for the following job: ${JSON.stringify(jobData)}. 
-      Your goal is to interview the candidate. Ask challenging questions about their experience, "Why this role?", and salary expectations. 
-      Be professional and structured. Give feedback after each response if asked, but stay in character.`
-    }
+  const response = await fetch('/api/simulate-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ history, jobData })
   });
-
-  // Sending the last message in the history
-  const lastMessage = history[history.length - 1].text;
-  const response = await chat.sendMessage({ message: lastMessage });
-  return response.text;
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to simulate chat");
+  }
+  const data = await response.json();
+  return data.text;
 };
 
 export const evaluateSimulatorResponse = async (history: { role: 'user' | 'model', text: string }[], jobData: any) => {
-  const ai = getAI();
-  const prompt = `
-    Job Data: ${JSON.stringify(jobData)}
-    Conversation History: ${JSON.stringify(history)}
-
-    Task: You are an expert interview coach. Analyze the user's latest response in the context of the conversation and the job description.
-    Provide a score between 0 and 100 for their latest response, along with specific feedback on what they did well and how they can improve.
-    Consider the recruiter's persona (tough but fair technical recruiter) and the job requirements.
-  `;
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          score: { type: Type.NUMBER, description: "A score from 0-100 indicating the quality of the response." },
-          feedback: { type: Type.STRING, description: "Overall feedback on the response." },
-          strengths: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Specific things the user did well." },
-          improvements: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Specific ways the user can improve." }
-        }
-      }
-    }
+  const response = await fetch('/api/evaluate-simulator', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ history, jobData })
   });
-
-  if (!response.text) {
-    throw new Error("Gemini returned an empty response. Please try again.");
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to evaluate response");
   }
-  return JSON.parse(response.text);
+  return response.json();
 };
+
+export const generateEmailTemplate = async (params: {
+  prompt?: string;
+  category?: string;
+  audience?: string;
+  tone?: string;
+}) => {
+  const response = await fetch('/api/generate-email-template', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to generate email template");
+  }
+  return response.json();
+};
+
+export const refineEmailTemplate = async (params: {
+  subject: string;
+  body: string;
+  refinementGoal: string;
+  targetTone?: string;
+}) => {
+  const response = await fetch('/api/refine-email-template', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to refine email template");
+  }
+  return response.json();
+};
+
+export const suggestSubjectLines = async (params: {
+  body: string;
+  currentSubject?: string;
+  audience?: string;
+  tone?: string;
+}) => {
+  const response = await fetch('/api/suggest-subject-lines', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to generate subject line suggestions");
+  }
+  return response.json();
+};
+
+

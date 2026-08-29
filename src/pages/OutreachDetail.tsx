@@ -6,8 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, ExternalLink, Mail, MessageSquare, Clock, CheckCircle, Copy, Share2, MoreVertical, Save, Loader2, Pencil } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Mail, MessageSquare, Clock, CheckCircle, Copy, Share2, MoreVertical, Save, Loader2, Pencil, Sparkles, BrainCircuit } from 'lucide-react';
 import Simulator from '@/components/outreach/Simulator';
+import { InterviewPrepModal } from '@/components/interview/InterviewPrepModal';
+import { InterviewTriggerBanner } from '@/components/interview/InterviewTriggerBanner';
+import { triggerInterviewPrepAgent } from '@/lib/interviewPrep';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -24,6 +27,8 @@ export default function OutreachDetail() {
   const [suggestedEmails, setSuggestedEmails] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
+  const [isInterviewBannerOpen, setIsInterviewBannerOpen] = useState(false);
 
   useEffect(() => {
     async function fetchOutreach() {
@@ -155,6 +160,31 @@ export default function OutreachDetail() {
           finalMessages = { ...outreach.messages, email_variants: currentVariants };
           updates.messages = finalMessages as any;
         }
+      }
+
+      // Automated AI Workflow: When status shifts to interview, activate the Interview Prep Agent!
+      if (status === 'interview' || status === 'interviewing') {
+        setIsInterviewBannerOpen(true);
+        triggerInterviewPrepAgent({
+          targetId: id || 'outreach',
+          targetType: 'outreach',
+          targetName: outreach.company_name || 'Hiring Company',
+          subtitle: outreach.job_title || 'Software Engineering Role',
+          tags: outreach.resume_data?.skills || ['Engineering', 'Architecture'],
+          jobDescription: outreach.job_data?.description,
+          candidateProfile: outreach.resume_data?.experience || outreach.notes,
+        }).catch((err) => console.warn('Background prep warmup:', err));
+
+        toast.info(`AI Agent Activated: Preparing Interview Dossier for ${outreach.company_name}`, {
+          description: `Custom technical & behavioral questions generated for ${outreach.job_title}`,
+          action: {
+            label: 'View Dossier',
+            onClick: () => {
+              setIsInterviewBannerOpen(false);
+              setIsInterviewModalOpen(true);
+            },
+          },
+        });
       }
 
       // Local update first for immediate response
@@ -376,10 +406,21 @@ export default function OutreachDetail() {
           )}
           <Badge className={cn(
             "border-none text-[10px] font-bold uppercase tracking-wider px-2 py-1",
-            outreach.status === 'replied' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+            outreach.status === 'replied' ? "bg-green-100 text-green-700" :
+            outreach.status === 'interview' || outreach.status === 'interviewing' ? "bg-purple-100 text-purple-700 border border-purple-200" :
+            "bg-blue-100 text-blue-700"
           )}>
             Status: {outreach.status}
           </Badge>
+          {(outreach.status === 'interview' || outreach.status === 'interviewing') && (
+            <Button
+              size="sm"
+              onClick={() => setIsInterviewModalOpen(true)}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold h-9 shadow-md shadow-purple-500/20 flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" /> AI Prep Dossier
+            </Button>
+          )}
           {outreach.status === 'draft' && (
             <Button 
               variant="outline" 
@@ -631,7 +672,7 @@ export default function OutreachDetail() {
                             size="sm" 
                             variant="outline" 
                             className="w-full h-9 border-brand-primary text-brand-primary hover:bg-brand-primary/5 font-bold"
-                            asChild
+                            
                           >
                             <a href={outreach.recruiter_url} target="_blank" rel="noopener noreferrer">
                               Connect on LinkedIn
@@ -724,20 +765,42 @@ export default function OutreachDetail() {
               <div className="space-y-3">
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Current Status</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {['sent', 'replied', 'closed'].map((status) => (
+                  {['draft', 'sent', 'replied', 'interview', 'closed'].map((status) => (
                     <Button 
                       key={status}
                       variant={outreach.status === status ? 'default' : 'outline'}
                       className={cn(
-                        "capitalize border-slate-200",
-                        outreach.status === status ? "bg-brand-primary text-white" : "hover:bg-slate-50"
+                        "capitalize border-slate-200 text-xs font-bold",
+                        outreach.status === status 
+                          ? (status === 'interview' ? "bg-purple-600 text-white hover:bg-purple-700" : "bg-brand-primary text-white") 
+                          : "hover:bg-slate-50 text-slate-600"
                       )}
                       onClick={() => updateStatus(status)}
                     >
-                      {status}
+                      {status === 'interview' ? '🎯 Interview' : status}
                     </Button>
                   ))}
                 </div>
+
+                {(outreach.status === 'interview' || outreach.status === 'interviewing') && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center gap-2 text-purple-800 font-bold text-xs">
+                      <Sparkles className="w-4 h-4 text-purple-600 animate-pulse" />
+                      <span>AI Interview Prep Active</span>
+                    </div>
+                    <p className="text-xs text-purple-900/80 leading-relaxed font-medium">
+                      Principal-level technical questions, STAR behavioral frameworks, and live simulation are ready for {outreach.company_name}.
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={() => setIsInterviewModalOpen(true)}
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs h-8 shadow-sm"
+                    >
+                      <BrainCircuit className="w-3.5 h-3.5 mr-1.5" /> Launch Interview Prep Dossier
+                    </Button>
+                  </div>
+                )}
+
                 {outreach.status === 'sent' && outreach.next_follow_up_at && (
                   <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                     <p className="text-[9px] text-brand-primary font-bold uppercase tracking-widest mb-1">Queue Active</p>
@@ -813,6 +876,31 @@ export default function OutreachDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Floating Trigger Banner for Automated Interview Workflow */}
+      <InterviewTriggerBanner
+        isOpen={isInterviewBannerOpen}
+        targetName={outreach.company_name || 'Hiring Company'}
+        onOpenDossier={() => {
+          setIsInterviewBannerOpen(false);
+          setIsInterviewModalOpen(true);
+        }}
+        onDismiss={() => setIsInterviewBannerOpen(false)}
+      />
+
+      {/* Full AI Interview Preparation Dossier Modal */}
+      <InterviewPrepModal
+        isOpen={isInterviewModalOpen}
+        onClose={() => setIsInterviewModalOpen(false)}
+        targetId={id || 'outreach'}
+        targetType="outreach"
+        targetName={outreach.company_name}
+        subtitle={outreach.job_title}
+        tags={outreach.resume_data?.skills || ['Software Engineering', 'System Architecture']}
+        jobDescription={outreach.job_data?.description}
+        candidateProfile={outreach.resume_data?.experience || outreach.notes}
+        notes={outreach.notes}
+      />
     </div>
   );
 }

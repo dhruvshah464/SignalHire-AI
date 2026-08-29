@@ -39,6 +39,15 @@ import {
   Eye,
   Database,
   Dna,
+  Plus,
+  Filter,
+  Search,
+  CheckCircle2,
+  FileEdit,
+  Send,
+  Layers,
+  History,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -59,6 +68,19 @@ import {
   Bar,
   Cell,
 } from "recharts";
+import { AnimatedProjectCard } from "@/components/projects/AnimatedProjectCard";
+import { ProjectStatusBadge } from "@/components/projects/ProjectStatusBadge";
+import { ProjectStatusStepper } from "@/components/projects/ProjectStatusStepper";
+import { InterviewPrepModal } from "@/components/interview/InterviewPrepModal";
+import { InterviewTriggerBanner } from "@/components/interview/InterviewTriggerBanner";
+import { triggerInterviewPrepAgent } from "@/lib/interviewPrep";
+import { toast } from "sonner";
+import {
+  ProjectStatusType,
+  StatusHistoryEntry,
+  normalizeStatus,
+  STATUS_CONFIGS,
+} from "@/components/projects/statusTypes";
 
 // --- MOCK DATA FOR CIVILIZATION LAYER ---
 
@@ -67,7 +89,8 @@ const MOCK_STARTUPS = [
     id: "1",
     name: "Nexus API",
     tagline: "Universal AI Agent Routing",
-    stage: "Autonomous MVP",
+    stage: "Sent",
+    status: "sent",
     momentum: 94,
     cap: "$14.2M",
     tags: ["AI Infra", "Routing"],
@@ -81,7 +104,8 @@ const MOCK_STARTUPS = [
     id: "2",
     name: "Aether OS",
     tagline: "Spatial Compute Engine",
-    stage: "Self-Evolving",
+    stage: "Interviewing",
+    status: "interviewing",
     momentum: 88,
     cap: "$28.5M",
     tags: ["AR", "OS"],
@@ -95,7 +119,8 @@ const MOCK_STARTUPS = [
     id: "3",
     name: "Synthetix Bio",
     tagline: "AI Protein Assembly",
-    stage: "Scaling",
+    stage: "Offer",
+    status: "offer",
     momentum: 98,
     cap: "$112M",
     tags: ["Hard Tech", "Bio"],
@@ -109,7 +134,8 @@ const MOCK_STARTUPS = [
     id: "4",
     name: "Vortex Finance",
     tagline: "Decentralized Dark Pools",
-    stage: "Ideation (AI Spawned)",
+    stage: "Draft",
+    status: "draft",
     momentum: 64,
     cap: "$2.1M",
     tags: ["DeFi", "Liquidity"],
@@ -117,6 +143,36 @@ const MOCK_STARTUPS = [
     chartData: Array.from({ length: 20 }, (_, i) => ({
       time: i,
       value: Math.floor(Math.random() * 50) + 10,
+    })),
+  },
+  {
+    id: "5",
+    name: "Chrono Mesh",
+    tagline: "Temporal Distributed Consensus",
+    stage: "Draft",
+    status: "draft",
+    momentum: 72,
+    cap: "$6.5M",
+    tags: ["Consensus", "Distributed"],
+    color: "from-amber-400 to-rose-500",
+    chartData: Array.from({ length: 20 }, (_, i) => ({
+      time: i,
+      value: Math.floor(Math.random() * 60) + 25,
+    })),
+  },
+  {
+    id: "6",
+    name: "Omniscience ML",
+    tagline: "Continuous Autonomous Fine-Tuning",
+    stage: "Replied",
+    status: "replied",
+    momentum: 91,
+    cap: "$19.8M",
+    tags: ["Autonomous AI", "Fine-Tuning"],
+    color: "from-teal-400 to-emerald-500",
+    chartData: Array.from({ length: 20 }, (_, i) => ({
+      time: i,
+      value: Math.floor(Math.random() * 90) + 50,
     })),
   },
 ];
@@ -328,13 +384,259 @@ const MOCK_NEWS = [
 
 export default function ProjectsFeed() {
   const [metricsData, setMetricsData] = useState(INITIAL_METRICS);
-  const [startupsData, setStartupsData] = useState(MOCK_STARTUPS);
+  const [startupsData, setStartupsData] = useState(() => {
+    try {
+      const stored = localStorage.getItem("ventureMemory_startups");
+      return stored ? JSON.parse(stored) : MOCK_STARTUPS;
+    } catch {
+      return MOCK_STARTUPS;
+    }
+  });
   const [marketTickers, setMarketTickers] = useState(MOCK_TICKERS);
   const [orderBook, setOrderBook] = useState(MOCK_ORDER_BOOK);
   const [activeTab, setActiveTab] = useState<
     "consciousness" | "globe" | "spawning" | "terminal" | "media" | "founder"
-  >("consciousness");
-  const [activeStartupId, setActiveStartupId] = useState<string | null>(null);
+  >(() => {
+    try {
+      const stored = localStorage.getItem("ventureMemory_activeTab");
+      return stored ? (stored as any) : "consciousness";
+    } catch {
+      return "consciousness";
+    }
+  });
+  const [activeStartupId, setActiveStartupId] = useState<string | null>(() => {
+    try {
+      const stored = localStorage.getItem("ventureMemory_activeStartupId");
+      return stored ? stored : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [projectSearchQuery, setProjectSearchQuery] = useState<string>("");
+  const [isDraftModalOpen, setIsDraftModalOpen] = useState<boolean>(false);
+  const [newProjectDraft, setNewProjectDraft] = useState({
+    name: "",
+    tagline: "",
+    tags: "AI Infra, Core Engine",
+    cap: "$5.0M",
+  });
+
+  // Automated AI Interview Preparation Workflow State
+  const [interviewPrepTarget, setInterviewPrepTarget] = useState<{
+    id: string;
+    name: string;
+    subtitle?: string;
+    tags?: string[];
+    cap?: string;
+    notes?: string;
+  } | null>(null);
+  const [isInterviewModalOpen, setIsInterviewModalOpen] = useState<boolean>(false);
+  const [isInterviewBannerOpen, setIsInterviewBannerOpen] = useState<boolean>(false);
+
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryEntry[]>(() => {
+    try {
+      const stored = localStorage.getItem("ventureMemory_statusHistory");
+      return stored
+        ? JSON.parse(stored)
+        : [
+            {
+              id: "hist-init-1",
+              projectId: "1",
+              projectName: "Nexus API",
+              fromStatus: "draft" as ProjectStatusType,
+              toStatus: "sent" as ProjectStatusType,
+              timestamp: "02:15:30",
+              note: "Dispatched API routing orchestrator to venture ecosystem",
+            },
+            {
+              id: "hist-init-2",
+              projectId: "2",
+              projectName: "Aether OS",
+              fromStatus: "sent" as ProjectStatusType,
+              toStatus: "interviewing" as ProjectStatusType,
+              timestamp: "01:45:12",
+              note: "Technical evaluation unlocked with spatial compute leads",
+            },
+            {
+              id: "hist-init-3",
+              projectId: "3",
+              projectName: "Synthetix Bio",
+              fromStatus: "interviewing" as ProjectStatusType,
+              toStatus: "offer" as ProjectStatusType,
+              timestamp: "01:10:00",
+              note: "Scale milestones confirmed and production allocation active",
+            },
+          ];
+    } catch {
+      return [];
+    }
+  });
+
+  // Venture Memory Engine: Persist to Local Storage
+  useEffect(() => {
+    try {
+      localStorage.setItem("ventureMemory_startups", JSON.stringify(startupsData));
+    } catch (e) {
+      console.warn("Venture Memory Engine: failed to persist startups data.");
+    }
+  }, [startupsData]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ventureMemory_statusHistory", JSON.stringify(statusHistory));
+    } catch (e) {
+      console.warn("Venture Memory Engine: failed to persist status history.");
+    }
+  }, [statusHistory]);
+
+  const handleStatusUpdate = (
+    id: string,
+    newStatus: ProjectStatusType,
+    oldStatus: ProjectStatusType
+  ) => {
+    const targetProject = startupsData.find((p: any) => p.id === id);
+    const newStageLabel = STATUS_CONFIGS[newStatus]?.label || newStatus;
+
+    setStartupsData((prev: any[]) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: newStatus,
+              stage: newStageLabel,
+            }
+          : item
+      )
+    );
+
+    const newEntry: StatusHistoryEntry = {
+      id: `hist-${Date.now()}`,
+      projectId: id,
+      projectName: targetProject?.name || "Venture Project",
+      fromStatus: oldStatus,
+      toStatus: newStatus,
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+      note: `Shifted lifecycle status from ${
+        STATUS_CONFIGS[oldStatus]?.shortLabel || oldStatus
+      } to ${STATUS_CONFIGS[newStatus]?.shortLabel || newStatus}`,
+    };
+
+    setStatusHistory((prev) => [newEntry, ...prev]);
+
+    // AUTOMATED WORKFLOW: Trigger AI Interview Preparation Agent
+    if (newStatus === "interviewing") {
+      const projMeta = {
+        id,
+        name: targetProject?.name || "Venture Project",
+        subtitle: targetProject?.tagline || "",
+        tags: targetProject?.tags || ["AI Infra", "Scale"],
+        cap: targetProject?.cap || "$10M+",
+        notes: `Pipeline transition from ${oldStatus} to interviewing.`,
+      };
+
+      setInterviewPrepTarget(projMeta);
+      setIsInterviewBannerOpen(true);
+
+      // Pre-fetch/generate dossier in background
+      triggerInterviewPrepAgent({
+        targetId: id,
+        targetType: "project",
+        targetName: projMeta.name,
+        subtitle: projMeta.subtitle,
+        tags: projMeta.tags,
+        capOrSalary: projMeta.cap,
+        notes: projMeta.notes,
+      }).catch((err) => console.warn("Background prep agent warmup:", err));
+
+      toast.info(`AI Agent Activated: Preparing Interview Dossier for ${projMeta.name}`, {
+        description: "Principal-level technical questions, STAR behavioral frameworks & strategic tips generated.",
+        action: {
+          label: "View Dossier",
+          onClick: () => {
+            setInterviewPrepTarget(projMeta);
+            setIsInterviewModalOpen(true);
+            setIsInterviewBannerOpen(false);
+          },
+        },
+      });
+    }
+  };
+
+  const handleCreateDraftProject = () => {
+    if (!newProjectDraft.name.trim()) return;
+
+    const newProject = {
+      id: `proj-${Date.now()}`,
+      name: newProjectDraft.name.trim(),
+      tagline:
+        newProjectDraft.tagline.trim() ||
+        "Autonomous next-generation venture blueprint.",
+      stage: "Draft",
+      status: "draft",
+      momentum: 60 + Math.floor(Math.random() * 25),
+      cap: newProjectDraft.cap || "$4.2M",
+      tags: newProjectDraft.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      color: "from-amber-400 to-orange-500",
+      chartData: Array.from({ length: 20 }, (_, i) => ({
+        time: i,
+        value: 30 + Math.floor(Math.random() * 40),
+      })),
+    };
+
+    setStartupsData((prev: any[]) => [newProject, ...prev]);
+
+    const initialEntry: StatusHistoryEntry = {
+      id: `hist-${Date.now()}`,
+      projectId: newProject.id,
+      projectName: newProject.name,
+      fromStatus: "draft",
+      toStatus: "draft",
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+      note: "Draft project blueprint initialized in local memory engine",
+    };
+
+    setStatusHistory((prev) => [initialEntry, ...prev]);
+    setNewProjectDraft({
+      name: "",
+      tagline: "",
+      tags: "AI Infra, Core Engine",
+      cap: "$5.0M",
+    });
+    setIsDraftModalOpen(false);
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ventureMemory_activeTab", activeTab);
+    } catch (e) {
+      // Ignore
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    try {
+      if (activeStartupId) {
+        localStorage.setItem("ventureMemory_activeStartupId", activeStartupId);
+      } else {
+        localStorage.removeItem("ventureMemory_activeStartupId");
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }, [activeStartupId]);
 
   // Pulse effect loops
   useEffect(() => {
@@ -533,7 +835,7 @@ export default function ProjectsFeed() {
 
       // 2. We instantly switch them into the new twin
       const newStartupId = "orb-" + Date.now();
-      const newStartup: Startup = {
+      const newStartup: any = {
         id: newStartupId,
         name: ventureData.name,
         tagline: ventureData.thesis,
@@ -622,9 +924,23 @@ export default function ProjectsFeed() {
     content: string;
     timestamp: string;
   }
-  const [artifacts, setArtifacts] = useState<Record<string, StartupArtifact[]>>(
-    {},
-  );
+  const [artifacts, setArtifacts] = useState<Record<string, StartupArtifact[]>>(() => {
+    try {
+      const stored = localStorage.getItem("ventureMemory_artifacts");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ventureMemory_artifacts", JSON.stringify(artifacts));
+    } catch (e) {
+      console.warn("Venture Memory Engine: failed to persist artifacts.");
+    }
+  }, [artifacts]);
+
   const [aiExecutionOutput, setAiExecutionOutput] = useState<string | null>(
     null,
   );
@@ -701,7 +1017,7 @@ export default function ProjectsFeed() {
           exit={{ opacity: 0, scale: 0.95 }}
           className="relative z-10 flex flex-col h-full space-y-6"
         >
-          <div className="flex items-center justify-between border-b border-white/10 pb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
             <Button
               variant="ghost"
               className="text-slate-400 hover:text-white"
@@ -709,7 +1025,19 @@ export default function ProjectsFeed() {
             >
               <ArrowRight className="w-4 h-4 mr-2 rotate-180" /> Leave War Room
             </Button>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <ProjectStatusBadge
+                status={activeStartup.status || activeStartup.stage || "draft"}
+                onStatusChange={(newStatus) =>
+                  handleStatusUpdate(
+                    activeStartup.id,
+                    newStatus,
+                    normalizeStatus(activeStartup.status || activeStartup.stage)
+                  )
+                }
+                size="md"
+                interactive={true}
+              />
               <div className="flex items-center gap-2 text-rose-500 font-mono text-xs uppercase bg-rose-500/10 px-3 py-1.5 rounded border border-rose-500/20 animate-pulse">
                 <div className="w-2 h-2 rounded-full bg-rose-500" /> Live War
                 Room
@@ -724,14 +1052,29 @@ export default function ProjectsFeed() {
             {/* Left Column: Digital Twin & Architecture */}
             <div className="xl:col-span-8 space-y-8">
               {/* Header */}
-              <div className="relative">
-                <div className="absolute -left-4 top-2 bottom-2 w-1 bg-gradient-to-b from-brand-primary to-transparent rounded-full" />
-                <h1 className="text-5xl font-black text-white tracking-tighter mb-2">
-                  {activeStartup.name}
-                </h1>
-                <p className="text-xl text-slate-400 font-medium">
-                  {activeStartup.tagline}
-                </p>
+              <div className="space-y-4">
+                <div className="relative">
+                  <div className="absolute -left-4 top-2 bottom-2 w-1 bg-gradient-to-b from-brand-primary to-transparent rounded-full" />
+                  <h1 className="text-5xl font-black text-white tracking-tighter mb-2">
+                    {activeStartup.name}
+                  </h1>
+                  <p className="text-xl text-slate-400 font-medium">
+                    {activeStartup.tagline}
+                  </p>
+                </div>
+
+                <div className="bg-black/40 border border-white/10 rounded-2xl p-4">
+                  <ProjectStatusStepper
+                    status={activeStartup.status || activeStartup.stage || "draft"}
+                    onStatusChange={(newStatus) =>
+                      handleStatusUpdate(
+                        activeStartup.id,
+                        newStatus,
+                        normalizeStatus(activeStartup.status || activeStartup.stage)
+                      )
+                    }
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -836,8 +1179,11 @@ export default function ProjectsFeed() {
 
                 {twinAction === "simulating" ? (
                   <div className="space-y-6 relative z-10">
-                    <div className="h-[250px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div 
+                      className="h-[250px] w-full min-w-[200px] min-h-[250px] relative overflow-hidden"
+                      style={{ width: '100%', height: '250px', minWidth: '200px', minHeight: '250px' }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={250}>
                         <LineChart data={activeStartup.chartData}>
                           <CartesianGrid
                             strokeDasharray="3 3"
@@ -1247,8 +1593,11 @@ export default function ProjectsFeed() {
                 <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                 {/* Ambient Chart Background */}
-                <div className="absolute inset-x-0 bottom-0 top-16 opacity-20 group-hover:opacity-40 transition-opacity pointer-events-none">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div 
+                  className="absolute inset-x-0 bottom-0 h-28 min-w-[120px] min-h-[80px] opacity-20 group-hover:opacity-40 transition-opacity pointer-events-none overflow-hidden"
+                  style={{ width: '100%', height: '112px', minWidth: '120px', minHeight: '80px' }}
+                >
+                  <ResponsiveContainer width="100%" height="100%" minWidth={120} minHeight={80}>
                     <AreaChart data={metric.chartData}>
                       <defs>
                         <linearGradient
@@ -1316,86 +1665,197 @@ export default function ProjectsFeed() {
                 className="space-y-8 relative z-20"
               >
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                  <div className="xl:col-span-2 space-y-8">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-2xl font-black text-white flex items-center gap-3">
-                        <Eye className="w-6 h-6 text-brand-primary" /> Global
-                        Hive Mind
-                      </h2>
+                  <div className="xl:col-span-2 space-y-6">
+                    {/* Header Controls */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-2xl font-black text-white flex items-center gap-3">
+                          <Eye className="w-6 h-6 text-brand-primary" /> Global Hive Mind & Projects
+                        </h2>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">
+                          Interactive Project Lifecycle & Live Transition Pipeline
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Filter projects..."
+                            value={projectSearchQuery}
+                            onChange={(e) => setProjectSearchQuery(e.target.value)}
+                            className="bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-primary/50 transition-colors w-40 sm:w-48"
+                          />
+                        </div>
+
+                        <Button
+                          size="sm"
+                          onClick={() => setIsDraftModalOpen(true)}
+                          className="bg-brand-primary text-black font-bold text-xs rounded-xl hover:bg-brand-primary/90 shadow-[0_0_20px_rgba(16,185,129,0.2)] flex items-center gap-1.5"
+                        >
+                          <Plus className="w-4 h-4" /> Draft Project
+                        </Button>
+                      </div>
                     </div>
 
-                    {/* Active Startups List - Upgraded to Civilizational look */}
-                    <div className="space-y-4">
-                      {startupsData.map((startup, idx) => (
-                        <div
-                          key={startup.id}
-                          onClick={() => setActiveStartupId(startup.id)}
-                          className="group relative bg-[#0f1014] border border-white/10 rounded-3xl p-6 overflow-hidden hover:border-brand-primary/50 transition-all duration-500 cursor-pointer shadow-xl flex flex-col md:flex-row gap-6 items-center"
-                        >
-                          <div
-                            className={cn(
-                              "absolute top-0 bottom-0 left-0 w-1 opacity-50 group-hover:opacity-100 bg-gradient-to-b",
-                              startup.color,
-                            )}
-                          />
+                    {/* Status Filter Tabs with Framer Motion Animated Slider */}
+                    <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#0a0c10] border border-white/10 rounded-2xl backdrop-blur-xl">
+                      {[
+                        { id: "all", label: "All Projects" },
+                        { id: "draft", label: "Draft" },
+                        { id: "sent", label: "Sent" },
+                        { id: "replied", label: "Replied" },
+                        { id: "interviewing", label: "Interviewing" },
+                        { id: "offer", label: "Offers & Scale" },
+                      ].map((tab) => {
+                        const count =
+                          tab.id === "all"
+                            ? startupsData.length
+                            : tab.id === "offer"
+                            ? startupsData.filter((s: any) => {
+                                const n = normalizeStatus(s.status || s.stage);
+                                return n === "offer" || n === "scaling";
+                              }).length
+                            : startupsData.filter(
+                                (s: any) =>
+                                  normalizeStatus(s.status || s.stage) === tab.id
+                              ).length;
 
-                          <div className="w-full md:w-1/3 space-y-2">
-                            <Badge
-                              variant="outline"
-                              className="bg-white/5 border-white/10 text-white shadow-sm mb-2 font-mono text-[10px] uppercase tracking-widest px-2"
+                        const isSelected = statusFilter === tab.id;
+
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setStatusFilter(tab.id)}
+                            className={cn(
+                              "relative px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-colors flex items-center gap-2",
+                              isSelected
+                                ? "text-white"
+                                : "text-slate-400 hover:text-slate-200"
+                            )}
+                          >
+                            {isSelected && (
+                              <motion.div
+                                layoutId="activeStatusFilterTab"
+                                className="absolute inset-0 bg-white/15 border border-white/20 rounded-xl shadow-sm"
+                                transition={{
+                                  type: "spring",
+                                  stiffness: 450,
+                                  damping: 30,
+                                }}
+                              />
+                            )}
+                            <span className="relative z-10">{tab.label}</span>
+                            <span
+                              className={cn(
+                                "relative z-10 text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold",
+                                isSelected
+                                  ? "bg-white/20 text-white"
+                                  : "bg-white/5 text-slate-500"
+                              )}
                             >
-                              {startup.stage}
-                            </Badge>
-                            <h3 className="text-2xl font-bold text-white leading-tight">
-                              {startup.name}
-                            </h3>
-                            <p className="text-sm text-slate-400 font-medium">
-                              {startup.tagline}
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Active Projects Feed with Framer Motion Layout Reordering */}
+                    <motion.div layout className="space-y-5">
+                      <AnimatePresence mode="popLayout">
+                        {startupsData
+                          .filter((startup: any) => {
+                            const norm = normalizeStatus(
+                              startup.status || startup.stage
+                            );
+                            const matchesFilter =
+                              statusFilter === "all" ||
+                              (statusFilter === "draft" && norm === "draft") ||
+                              (statusFilter === "sent" && norm === "sent") ||
+                              (statusFilter === "replied" &&
+                                norm === "replied") ||
+                              (statusFilter === "interviewing" &&
+                                norm === "interviewing") ||
+                              (statusFilter === "offer" &&
+                                (norm === "offer" || norm === "scaling"));
+
+                            const matchesSearch =
+                              !projectSearchQuery.trim() ||
+                              startup.name
+                                .toLowerCase()
+                                .includes(projectSearchQuery.toLowerCase()) ||
+                              startup.tagline
+                                .toLowerCase()
+                                .includes(projectSearchQuery.toLowerCase());
+
+                            return matchesFilter && matchesSearch;
+                          })
+                          .map((startup: any) => (
+                            <AnimatedProjectCard
+                              key={startup.id}
+                              project={startup}
+                              onSelectProject={(id) => setActiveStartupId(id)}
+                              onStatusUpdate={handleStatusUpdate}
+                              historyEntries={statusHistory}
+                              onOpenInterviewPrep={(proj) => {
+                                setInterviewPrepTarget({
+                                  id: proj.id,
+                                  name: proj.name,
+                                  subtitle: proj.tagline,
+                                  tags: proj.tags,
+                                  cap: proj.cap,
+                                });
+                                setIsInterviewModalOpen(true);
+                              }}
+                            />
+                          ))}
+                      </AnimatePresence>
+
+                      {startupsData.filter((startup: any) => {
+                        const norm = normalizeStatus(
+                          startup.status || startup.stage
+                        );
+                        const matchesFilter =
+                          statusFilter === "all" ||
+                          (statusFilter === "draft" && norm === "draft") ||
+                          (statusFilter === "sent" && norm === "sent") ||
+                          (statusFilter === "replied" && norm === "replied") ||
+                          (statusFilter === "interviewing" &&
+                            norm === "interviewing") ||
+                          (statusFilter === "offer" &&
+                            (norm === "offer" || norm === "scaling"));
+                        return matchesFilter;
+                      }).length === 0 && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="bg-[#0f1014] border border-white/10 rounded-3xl p-12 text-center space-y-4"
+                        >
+                          <Layers className="w-12 h-12 text-slate-500 mx-auto opacity-40" />
+                          <div>
+                            <h4 className="text-lg font-bold text-white">
+                              No projects in this stage
+                            </h4>
+                            <p className="text-xs text-slate-400 font-mono mt-1">
+                              Switch tabs or draft a new project to advance statuses.
                             </p>
                           </div>
-
-                          <div className="hidden md:block w-px h-16 bg-white/10 mx-2" />
-
-                          <div className="w-full md:flex-1 h-16 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={startup.chartData}>
-                                <YAxis
-                                  domain={["dataMin - 10", "dataMax + 10"]}
-                                  hide
-                                />
-                                <Line
-                                  type="monotone"
-                                  dataKey="value"
-                                  stroke="#3b82f6"
-                                  strokeWidth={2}
-                                  dot={false}
-                                  isAnimationActive={false}
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-
-                          <div className="hidden md:block w-px h-16 bg-white/10 mx-2" />
-
-                          <div className="w-full md:w-32 flex flex-row md:flex-col justify-between md:justify-center items-center md:items-end gap-2 text-right">
-                            <div>
-                              <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">
-                                Momentum
-                              </p>
-                              <p className="text-2xl font-black text-white font-mono">
-                                {startup.momentum}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              className="w-10 h-10 rounded-full bg-white/5 hover:bg-brand-primary/20 hover:text-brand-primary p-0"
-                            >
-                              <ArrowRight className="w-4 h-4 -rotate-45" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setStatusFilter("all");
+                              setIsDraftModalOpen(true);
+                            }}
+                            className="bg-white/10 text-white hover:bg-white/20 border border-white/15 rounded-xl font-bold text-xs"
+                          >
+                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Initialize New Draft
+                          </Button>
+                        </motion.div>
+                      )}
+                    </motion.div>
                   </div>
 
                   {/* Right Panel: Ecosystem Events */}
@@ -1499,8 +1959,11 @@ export default function ProjectsFeed() {
                 </div>
 
                 {/* Glowing Map Mockup using ScatterChart as a stylistic representation */}
-                <div className="absolute inset-0 w-[120%] h-[120%] -left-[10%] -top-[10%] opacity-80 mix-blend-screen pointer-events-none">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div 
+                  className="absolute inset-0 w-full h-full min-w-[280px] min-h-[350px] opacity-80 mix-blend-screen pointer-events-none overflow-hidden"
+                  style={{ width: '100%', height: '100%', minWidth: '280px', minHeight: '350px' }}
+                >
+                  <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={350}>
                     <ScatterChart
                       margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
                     >
@@ -1674,7 +2137,48 @@ export default function ProjectsFeed() {
                         >
                           Discard
                         </Button>
-                        <Button className="bg-purple-600 text-white font-bold hover:bg-purple-500">
+                        <Button
+                          className="bg-purple-600 text-white font-bold hover:bg-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.3)]"
+                          onClick={() => {
+                            if (spawnResult) {
+                              const newVenture = {
+                                id: `spawn-${Date.now()}`,
+                                name: spawnResult.name,
+                                tagline: spawnResult.thesis,
+                                stage: "Draft",
+                                status: "draft",
+                                momentum: 78,
+                                cap: spawnResult.valuation || "$8.5M",
+                                tags: spawnResult.dna || ["AI Venture", "Autonomous MVP"],
+                                color: "from-purple-500 to-indigo-500",
+                                chartData: Array.from({ length: 20 }, (_, i) => ({
+                                  time: i,
+                                  value: 40 + Math.floor(Math.random() * 50),
+                                })),
+                              };
+                              setStartupsData((prev: any[]) => [newVenture, ...prev]);
+                              setStatusHistory((prev) => [
+                                {
+                                  id: `hist-${Date.now()}`,
+                                  projectId: newVenture.id,
+                                  projectName: newVenture.name,
+                                  fromStatus: "draft",
+                                  toStatus: "draft",
+                                  timestamp: new Date().toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                  }),
+                                  note: "Injected autonomous spawned genome into Ecosystem as Draft Project",
+                                },
+                                ...prev,
+                              ]);
+                              setSpawnResult(null);
+                              setActiveTab("consciousness");
+                              setStatusFilter("draft");
+                            }
+                          }}
+                        >
                           Inject to Ecosystem
                         </Button>
                       </div>
@@ -1882,70 +2386,83 @@ export default function ProjectsFeed() {
                     </div>
 
                     {/* Trading Chart (Mocked with Area/Bar for depth) */}
-                    <div className="h-[400px] w-full mb-4 relative z-10">
-                      <ResponsiveContainer width="100%" height="80%">
-                        <AreaChart data={startupsData[0].chartData}>
-                          <defs>
-                            <linearGradient
-                              id="colorNexa"
-                              x1="0"
-                              y1="0"
-                              x2="0"
-                              y2="1"
-                            >
-                              <stop
-                                offset="5%"
-                                stopColor="#10b981"
-                                stopOpacity={0.4}
-                              />
-                              <stop
-                                offset="95%"
-                                stopColor="#10b981"
-                                stopOpacity={0}
-                              />
-                            </linearGradient>
-                          </defs>
-                          <XAxis dataKey="time" hide />
-                          <YAxis
-                            domain={["auto", "auto"]}
-                            orientation="right"
-                            tick={{ fill: "#64748b", fontSize: 10 }}
-                            axisLine={false}
-                            tickLine={false}
-                          />
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="#ffffff05"
-                            vertical={false}
-                          />
-                          <Tooltip
-                            cursor={{ stroke: "#ffffff20" }}
-                            contentStyle={{
-                              backgroundColor: "#000",
-                              border: "1px solid #333",
-                            }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke="#10b981"
-                            strokeWidth={2}
-                            fillOpacity={1}
-                            fill="url(#colorNexa)"
-                            isAnimationActive={false}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                      <ResponsiveContainer width="100%" height="20%">
-                        <BarChart data={startupsData[0].chartData}>
-                          <Bar
-                            dataKey="value"
-                            fill="#10b981"
-                            opacity={0.3}
-                            isAnimationActive={false}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
+                    <div 
+                      className="h-[400px] w-full min-w-[280px] min-h-[400px] mb-4 relative z-10 flex flex-col"
+                      style={{ width: '100%', height: '400px', minWidth: '280px', minHeight: '400px' }}
+                    >
+                      <div 
+                        className="h-[320px] w-full min-w-[280px] min-h-[320px] relative overflow-hidden"
+                        style={{ width: '100%', height: '320px', minWidth: '280px', minHeight: '320px' }}
+                      >
+                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={320}>
+                          <AreaChart data={startupsData[0].chartData}>
+                            <defs>
+                              <linearGradient
+                                id="colorNexa"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                              >
+                                <stop
+                                  offset="5%"
+                                  stopColor="#10b981"
+                                  stopOpacity={0.4}
+                                />
+                                <stop
+                                  offset="95%"
+                                  stopColor="#10b981"
+                                  stopOpacity={0}
+                                />
+                              </linearGradient>
+                            </defs>
+                            <XAxis dataKey="time" hide />
+                            <YAxis
+                              domain={["auto", "auto"]}
+                              orientation="right"
+                              tick={{ fill: "#64748b", fontSize: 10 }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="#ffffff05"
+                              vertical={false}
+                            />
+                            <Tooltip
+                              cursor={{ stroke: "#ffffff20" }}
+                              contentStyle={{
+                                backgroundColor: "#000",
+                                border: "1px solid #333",
+                              }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="value"
+                              stroke="#10b981"
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#colorNexa)"
+                              isAnimationActive={false}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div 
+                        className="h-[80px] w-full min-w-[280px] min-h-[80px] relative overflow-hidden"
+                        style={{ width: '100%', height: '80px', minWidth: '280px', minHeight: '80px' }}
+                      >
+                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={80}>
+                          <BarChart data={startupsData[0].chartData}>
+                            <Bar
+                              dataKey="value"
+                              fill="#10b981"
+                              opacity={0.3}
+                              isAnimationActive={false}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
 
                     {/* Action Bar */}
@@ -2470,6 +2987,177 @@ export default function ProjectsFeed() {
             )}
           </AnimatePresence>
         </>
+      )}
+
+      {/* Draft Project Modal */}
+      <AnimatePresence>
+        {isDraftModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDraftModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.5, bounce: 0.15 }}
+              className="relative w-full max-w-lg bg-[#0c0d12] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 z-10"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                    <FileEdit className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white">
+                      Draft New Project
+                    </h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Initialize a venture proposal in the Ecosystem pipeline
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDraftModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Project Name *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Helix AI or Pulse Engine"
+                    value={newProjectDraft.name}
+                    onChange={(e) =>
+                      setNewProjectDraft((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Core Thesis / Tagline
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Real-time predictive dispatch routing for autonomous fleets"
+                    value={newProjectDraft.tagline}
+                    onChange={(e) =>
+                      setNewProjectDraft((prev) => ({
+                        ...prev,
+                        tagline: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Target Cap / Val
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="$6.0M"
+                      value={newProjectDraft.cap}
+                      onChange={(e) =>
+                        setNewProjectDraft((prev) => ({
+                          ...prev,
+                          cap: e.target.value,
+                        }))
+                      }
+                      className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Tags (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="AI, Infra, Cloud"
+                      value={newProjectDraft.tags}
+                      onChange={(e) =>
+                        setNewProjectDraft((prev) => ({
+                          ...prev,
+                          tags: e.target.value,
+                        }))
+                      }
+                      className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs font-mono flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>
+                    Initial status will be <strong>Draft</strong>. You can dispatch to <strong>Sent</strong> with real-time transition animations anytime.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDraftModalOpen(false)}
+                  className="border-white/10 text-slate-300 hover:text-white rounded-xl text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateDraftProject}
+                  disabled={!newProjectDraft.name.trim()}
+                  className="bg-brand-primary text-black font-bold text-xs rounded-xl hover:bg-brand-primary/90 shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50"
+                >
+                  <Plus className="w-4 h-4 mr-1.5" /> Initialize Draft Project
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Trigger Banner for Automated Interview Workflow */}
+      <InterviewTriggerBanner
+        isOpen={isInterviewBannerOpen && !!interviewPrepTarget}
+        targetName={interviewPrepTarget?.name || 'Project'}
+        onOpenDossier={() => {
+          setIsInterviewBannerOpen(false);
+          setIsInterviewModalOpen(true);
+        }}
+        onDismiss={() => setIsInterviewBannerOpen(false)}
+      />
+
+      {/* Full AI Interview Preparation Dossier Modal */}
+      {interviewPrepTarget && (
+        <InterviewPrepModal
+          isOpen={isInterviewModalOpen}
+          onClose={() => setIsInterviewModalOpen(false)}
+          targetId={interviewPrepTarget.id}
+          targetType="project"
+          targetName={interviewPrepTarget.name}
+          subtitle={interviewPrepTarget.subtitle}
+          tags={interviewPrepTarget.tags}
+          capOrSalary={interviewPrepTarget.cap}
+          notes={interviewPrepTarget.notes}
+        />
       )}
     </div>
   );

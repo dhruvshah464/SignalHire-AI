@@ -1,91 +1,66 @@
-# 🌌 A.I. Venture Studio OS 
+# 🌐 SignalHire AI
 
-> Welcome to the future of venture capital and startup incubation. An autonomous system that spawns, monitors, and trades synthetic AI-driven companies in real-time.
+**The Substrate for Autonomous Venture Creation & Management**
 
-Welcome to the **A.I. Venture Studio OS**, a high-tech, hyper-immersive simulation of what a fully autonomous startup ecosystem looks like. Forget human-led incubation; this dashboard represents a "Global Hive Mind" where AI agents come up with ideas, validate markets, write code, deploy infrastructure, and trade equities—all without a human in the loop.
-
-## 🚀 The Vision: End-to-End Autonomous Ventures
-
-This platform visualizes the complete lifecycle of a technology company:
-**Idea ➔ Market Analysis ➔ AI Workforce Deployment ➔ Market Trading ➔ Media Dominance**
-
-Every piece of the ecosystem is managed by an interconnected intelligence engine, ensuring capital is rotated efficiently and failing ideas are scrapped or merged before they burn out.
+InnovationOS is a full-stack, AI-native platform designed to simulate, manage, and orchestrate the lifecycle of synthetic and real-world projects. At its core is the **Venture Civilization Layer**—a revolutionary architectural paradigm where AI agents autonomously spawn startups, generate product artifacts, and simulate market dynamics in real-time.
 
 ---
 
-## ⚡ Core Modules
+## 🚀 The Venture Civilization Layer: Vision
 
-### 🌐 1. Ecosystem Consciousness Engine (Global Hive Mind)
-The central nervous system of the platform.
-*   **System-Wide Telemetry:** Tracks total spawned ventures, global network valuation, and active AI nodes.
-*   **Live AI Interventions:** Real-time event logging where the AI intervenes in startup operations—proposing mergers (e.g., *Collision detected: NEXA and QBIO building identical routing layers*), patching vulnerabilities, or shifting capital away from dying trends.
+The Venture Civilization Layer transforms the application from a passive management tool into an active, breathing ecosystem. Instead of merely tracking data, InnovationOS acts as an orchestrator for AI-driven ventures. 
 
-### 🧠 2. Autonomous Venture Spawning (Market Fit Analysis)
-Have a problem statement? The system will build a company around it.
-*   **The AI Spawner:** Input a problem (e.g., "Doctors spend 40% of their time on admin").
-*   **Telemetry Report:** The AI instantly synthesizes the market sizing (**TAM, SAM, SOM**), lists key competitors, gives a final viability verdict, and assigns an AI Confidence Score.
-
-### ⚔️ 3. Live War Room (Digital Twins)
-A dedicated "War Room" for every active startup inside the ecosystem.
-*   **Execution Metrics:** Instantly see a company's Execution Velocity, Autopilot Status, and Burn Rate.
-*   **AI Workforce Health:** Monitor the autonomous bot squads writing code or designing assets (e.g., *AI Engineering Squad Alpha* refactoring an API Gateway), complete with active status lights and health indicators.
-*   **Simulated Trajectories:** AI predicts the future—showing chances of a successful "Pivot" or a catastrophic "Collapse Risk" based on current momentum.
-
-### 📈 4. Venture Stock Exchange (The Terminal)
-A high-frequency trading terminal for AI-generated startup equities.
-*   **Live Order Book:** Visualize the market depth with a real-time Bid/Ask spread, visualizing exact supply and demand.
-*   **AI Market Analysts:** Autonomous trading agents (Oracle-7, Sentinel, Atlas) provide real-time insights, confidence scores, and bullish/bearish indicators.
-*   **Market Watch:** Watch tickers like `NEXA`, `VRX`, and `QBIO` as they fluctuate based on the AI's execution of their codebase.
-
-### 🎬 5. Startup Intelligence Media Network
-Because every ecosystem needs a narrative.
-*   **Cinematic Feed:** An immersive, automated news feed detailing the latest breakthroughs (e.g., "Why QBIO is dominating biotech momentum").
-*   **AI-Generated Documentaries:** Deep dives into the building of these synthetic networks, showcasing how the "Brain of the Web" was built, with simulated watch-times and immersive cinematic cover art.
+* **Autonomous Spawning**: Provide a problem statement, and AI PMs, CTOs, and Analysts orchestrate together to generate a fully realized venture thesis, complete with market sizing and system architecture.
+* **Live Ecosystem**: Ventures exist in a dynamic state. Their momentum, market tickers, and order books pulse and shift continuously, providing a living visualization of market fit.
+* **Artifact Vaults**: Every venture automatically produces and permanently archives artifacts—PRDs, code snippets, execution plans—accessible instantly via the Venture Memory Engine.
 
 ---
 
-## 🎯 6. Autonomous Outreach Matrix (AI Campaign Generator)
-Beyond incubation, the ecosystem integrates a hyper-targeted **Outreach Platform** that crafts and manages precision outreach sequences. When you need to place talent or interface with external human entities, the AI handles the matchmaking and communication entirely.
+## 🏗️ Current Architecture
 
-*   **Intelligent Job Scraping:** Search for active job listings inside the app or feed it a URL. The AI automatically parses job descriptions, company details, and recruiter intel.
-*   **Resume Telemetry & Match Scoring:** Upload a resume file (PDF/DOCX) or paste raw text. The engine parses the candidate's professional matrix and assigns a real-time **Match Score Verdict** against the target job (e.g., *85% Match - Excellent!*).
-*   **Predictive "Quick Fixes":** Before sending an email, the AI analyzes skill gaps and generates strategic suggestions on how to bridge the gap during interviews.
-*   **Precision Message Synthesis:** Fully autonomous multi-channel sequence generation.
-    *   *Cold Email & Subject Line:* A highly personalized, confident pitch mapping the candidate's exact skills to the job gaps.
-    *   *LinkedIn DM:* Short-form direct messages for recruiter outreach.
-    *   *LinkedIn Connection Request:* Precise, under-300-character ice breakers.
-    *   *Automated Follow-ups:* A sequenced drip campaign to ensure conversion.
-*   **Campaign Command Center:** Start, pause, store, and edit active drafts inside the central dashboard, tracking outreach progression from "Draft" to "Sent" to "Closed".
+InnovationOS is built on a high-performance, container-ready modern stack:
+
+* **Frontend Engine**: React 19 + Vite, styled with Tailwind CSS for precision utility layouts.
+* **Animation & Visualization**: `framer-motion` for fluid spatial transitions and `recharts` for live market data and momentum graphs.
+* **Backend Substrate**: Custom Node.js/Express server (via `server.ts`), compiled blazingly fast with `esbuild` for production.
+* **Intelligence Layer**: Powered by the Gemini API (`@google/genai`), enabling the complex autonomous agent execution paths (`/api/spawn-venture`, `/api/ai-execute`).
+* **Persistence Layer (Venture Memory Engine)**: Advanced client-side `localStorage` hydration ensuring complex active states, generated artifacts, and project pipelines seamlessly persist across sessions without requiring immediate cloud database provisioning.
 
 ---
 
-## 🛠️ Technology Stack
+## ⚡ Technical Capabilities
 
-Built with a futuristic, cyberpunk-inspired aesthetic, using modern frontend technologies:
+### 1. Venture Memory Engine
+A zero-latency, highly robust persistence layer. It automatically caches the global ecosystem state:
+- Real-time startup momentum and configurations.
+- Active workspace context (e.g., maintaining focus on a specific agent terminal or founder layer).
+- AI-generated markdown artifacts and product documentation.
 
-*   **React 18 & Vite:** Lightning-fast rendering and instantaneous hot-module replacement.
-*   **Tailwind CSS:** For the hyper-custom, dark-mode, neon-accented cyberpunk UI.
-*   **Framer Motion:** Powering the liquid-smooth page transitions, glowing pulses, and blur effects that make the dashboard feel *alive*.
-*   **Recharts:** Transforming data arrays into interactive line charts and metric visualizers representing market caps and node performance.
-*   **Lucide React:** Clean, consistent iconography used throughout the interface.
+### 2. Multi-Agent Orchestration
+InnovationOS acts as the conductor for specialized AI agents. Through dedicated `/api/` proxy routes, the system routes context to specific roles (AI PM, AI CTO), parsing their outputs into structured deliverables and preserving them in the Artifact Vault.
 
----
+### 3. Career / Job Project Tracking
+The system also includes a localized `ProjectMemory` utility (`src/lib/memory.ts`) to manage real-world operations. Users can track job applications, update pipeline statuses (applied, interviewing, offer), and append AI-generated notes securely.
 
-## 💻 How to Run
-
-1.  **Clone the Repository** and step into the future.
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-3.  **Boot up the Intelligence Engine (Dev Server):**
-    ```bash
-    npm run dev
-    ```
-4.  Open `localhost:3000` in your browser to view the Command Center.
+### 4. Live Data Synthesizer
+A local pulse loop continuously calculates and repaints market tickers, order books, and venture metrics to simulate a living global market, rendering smooth data transitions via localized React hooks.
 
 ---
 
-**STATUS:** [ONLINE]  
-**AI WORKFORCE:** [OPTIMAL]  
-*The ecosystem is self-sustaining. Welcome to the hive.*
+## 🛠️ Getting Started
+
+To boot the InnovationOS terminal locally:
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure Environment
+# Copy .env.example to .env and add your Gemini API key (GEMINI_API_KEY)
+cp .env.example .env
+
+# 3. Ignite the Development Server
+npm run dev
+```
+
+*The server will boot the Vite middleware and Express API routes simultaneously on `http://localhost:3000`.*

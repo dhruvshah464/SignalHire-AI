@@ -6,6 +6,7 @@ import OutreachDetail from '@/pages/OutreachDetail';
 import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
 import ProjectsFeed from '@/pages/ProjectsFeed';
+import Templates from '@/pages/Templates';
 import { Toaster } from '@/components/ui/sonner';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/new" element={<NewOutreach />} />
+          <Route path="/templates" element={<Templates />} />
           <Route path="/outreach/:id" element={<OutreachDetail />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
@@ -25,3 +27,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
